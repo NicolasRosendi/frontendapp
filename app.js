@@ -1,0 +1,855 @@
+// ══════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════
+const API = 'https://backenddnd.onrender.com/api';
+
+// ══════════════════════════════════════
+//  APP STATE
+// ══════════════════════════════════════
+let currentUser = null;
+let currentToken = null;
+let currentCharId = null;
+let authMode = 'login'; // 'login' | 'register'
+let combatPollInterval = null;
+
+const state = {
+  editMode: false,
+  inspiration: false,
+  deathSaves: [false,false,false,false,false,false],
+  stats: { str:10, dex:10, con:10, int:10, wis:10, cha:10 },
+  hpCurr:10, hpMax:10, hpTemp:0,
+  profBonus:2,
+  savingThrowProf:[],
+  skillProf:[],
+  skillExpertise:[],
+  spellAbilityKey:'int',
+  attacks:[],
+  inventory:[],
+  spells:{
+    0:{slots:0,used:0,list:['','','','','',''],prep:[false,false,false,false,false,false]},
+    1:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
+    2:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
+    3:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
+    4:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
+    5:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
+    6:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
+    7:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
+    8:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
+    9:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
+  }
+};
+
+// Combat state
+let combatState = {
+  tableId: null,
+  tableName: '',
+  isOwner: false,
+  turnOrder: [],
+  currentTurn: 0,
+  currentRound: 1,
+  myCharacterId: null,
+  selectedTarget: null,
+  selectedWeapon: 0,
+  hpStatus: [],
+  log: [],
+};
+
+// ══════════════════════════════════════
+//  API HELPERS
+// ══════════════════════════════════════
+async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (currentToken) headers['Authorization'] = 'Bearer ' + currentToken;
+  try {
+    const res = await fetch(API + path, { ...options, headers });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error del servidor');
+    return data;
+  } catch (err) {
+    if (err.message === 'Failed to fetch') throw new Error('No se pudo conectar al servidor');
+    throw err;
+  }
+}
+
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => t.className = 'toast', 2500);
+}
+
+// ══════════════════════════════════════
+//  SCREEN MANAGEMENT
+// ══════════════════════════════════════
+function showScreen(name) {
+  document.getElementById('authScreen').style.display = name === 'auth' ? 'flex' : 'none';
+  document.getElementById('lobbyScreen').className = 'lobby-screen' + (name === 'lobby' ? ' active' : '');
+  document.getElementById('combatScreen').className = 'combat-screen' + (name === 'combat' ? ' active' : '');
+  document.getElementById('appWrapper').className = 'app-wrapper' + (name === 'sheet' ? ' active' : '');
+  if (name !== 'combat' && combatPollInterval) { clearInterval(combatPollInterval); combatPollInterval = null; }
+}
+
+// ══════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════
+function toggleAuthMode() {
+  authMode = authMode === 'login' ? 'register' : 'login';
+  document.getElementById('authTitle').textContent = authMode === 'login' ? 'Iniciar Sesión' : 'Registro';
+  document.getElementById('authSubmit').textContent = authMode === 'login' ? 'Entrar' : 'Registrarme';
+  document.getElementById('authToggleText').textContent = authMode === 'login' ? '¿No tenés cuenta?' : '¿Ya tenés cuenta?';
+  document.getElementById('authToggleLink').textContent = authMode === 'login' ? 'Registrate' : 'Iniciá sesión';
+  document.getElementById('authError').className = 'auth-error';
+}
+
+async function handleAuth() {
+  const user = document.getElementById('authUser').value.trim();
+  const pass = document.getElementById('authPass').value;
+  const errEl = document.getElementById('authError');
+  const btn = document.getElementById('authSubmit');
+
+  if (!user || !pass) { errEl.textContent = 'Completá usuario y contraseña'; errEl.className = 'auth-error show'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Cargando...';
+  try {
+    const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
+    const data = await api(endpoint, { method: 'POST', body: JSON.stringify({ username: user, password: pass }) });
+    currentUser = data.user;
+    currentToken = data.token;
+    localStorage.setItem('dnd_token', data.token);
+    localStorage.setItem('dnd_user', JSON.stringify(data.user));
+    showToast(authMode === 'login' ? 'Bienvenido, ' + data.user.username : 'Cuenta creada. Bienvenido!');
+    enterLobby();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.className = 'auth-error show';
+  }
+  btn.disabled = false;
+  btn.textContent = authMode === 'login' ? 'Entrar' : 'Registrarme';
+}
+
+// Enter on password
+document.getElementById('authPass').addEventListener('keydown', function(e) { if (e.key === 'Enter') handleAuth(); });
+
+function logout() {
+  currentUser = null;
+  currentToken = null;
+  localStorage.removeItem('dnd_token');
+  localStorage.removeItem('dnd_user');
+  showScreen('auth');
+}
+
+// ══════════════════════════════════════
+//  LOBBY
+// ══════════════════════════════════════
+function enterLobby() {
+  showScreen('lobby');
+  document.getElementById('lobbyUser').textContent = currentUser.username;
+  loadCharacters();
+  loadTables();
+}
+
+function switchLobbyTab(name, btn) {
+  document.querySelectorAll('.lobby-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.lobby-nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('lobby-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'tables') loadTables();
+}
+
+// ── Characters ────────────────────────
+async function loadCharacters() {
+  const container = document.getElementById('charListContainer');
+  container.innerHTML = '<div class="spinner"></div>';
+  try {
+    const data = await api('/characters');
+    if (data.characters.length === 0) {
+      container.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-style:italic;">No tenés fichas todavía. Creá una!</div>';
+      return;
+    }
+    container.innerHTML = data.characters.map(c => `
+      <div class="char-list-item" onclick="openCharacter(${c.id})">
+        <div>
+          <div class="char-list-name">${c.name}</div>
+          <div class="char-list-meta">Actualizado: ${new Date(c.updated_at).toLocaleDateString()}</div>
+        </div>
+        <div class="char-list-actions">
+          <button class="char-action-btn" onclick="event.stopPropagation();openCharacter(${c.id})">Abrir</button>
+          <button class="char-action-btn del" onclick="event.stopPropagation();deleteCharacter(${c.id},'${c.name}')">✕</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) { container.innerHTML = '<div style="color:var(--red2);padding:12px;">Error: ' + err.message + '</div>'; }
+}
+
+async function createCharacter() {
+  try {
+    const data = await api('/characters', { method: 'POST', body: JSON.stringify({ name: 'Nuevo Personaje' }) });
+    showToast('Ficha creada');
+    openCharacter(data.character.id);
+  } catch (err) { showToast(err.message, true); }
+}
+
+async function deleteCharacter(id, name) {
+  if (!confirm('¿Borrar la ficha "' + name + '"?')) return;
+  try {
+    await api('/characters/' + id, { method: 'DELETE' });
+    showToast('Ficha eliminada');
+    loadCharacters();
+  } catch (err) { showToast(err.message, true); }
+}
+
+async function openCharacter(id) {
+  try {
+    const data = await api('/characters/' + id);
+    currentCharId = id;
+    loadStateFromData(data.character.data, data.character.name);
+    showScreen('sheet');
+    renderAll();
+  } catch (err) { showToast(err.message, true); }
+}
+
+function loadStateFromData(d, name) {
+  state.editMode = false;
+  state.inspiration = d.inspiration || false;
+  state.deathSaves = d.deathSaves || [false,false,false,false,false,false];
+  state.stats = d.stats || { str:10, dex:10, con:10, int:10, wis:10, cha:10 };
+  state.hpCurr = d.hpCurr !== undefined ? d.hpCurr : 10;
+  state.hpMax = d.hpMax !== undefined ? d.hpMax : 10;
+  state.hpTemp = d.hpTemp || 0;
+  state.profBonus = d.profBonus || 2;
+  state.savingThrowProf = d.savingThrowProf || [];
+  state.skillProf = d.skillProf || [];
+  state.skillExpertise = d.skillExpertise || [];
+  state.spellAbilityKey = d.spellAbilityKey || 'int';
+  state.attacks = d.attacks || [];
+  state.inventory = d.inventory || [];
+  state.spells = d.spells || state.spells;
+  // Text fields
+  textFields = {};
+  const tf = ['charName','class','background','race','alignment','player','xp','proficiencies','personality','ideals','bonds','flaws','traits','age','height','weight','eyes','skin','hair','appearance','backstory','allies','treasure','additionalTraits','ac','initiative','speed','hitDice','hdTotal','armorCA','armorName','coinPP','coinPO','coinPE','coinPPT','coinPC','spellAbility'];
+  tf.forEach(k => { if (d[k] !== undefined) textFields[k] = String(d[k]); });
+  if (name && !textFields.charName) textFields.charName = name;
+}
+
+function getStateForSave() {
+  const d = {
+    ...textFields,
+    inspiration: state.inspiration,
+    deathSaves: state.deathSaves,
+    stats: state.stats,
+    hpCurr: state.hpCurr,
+    hpMax: state.hpMax,
+    hpTemp: state.hpTemp,
+    profBonus: state.profBonus,
+    savingThrowProf: state.savingThrowProf,
+    skillProf: state.skillProf,
+    skillExpertise: state.skillExpertise,
+    spellAbilityKey: state.spellAbilityKey,
+    attacks: state.attacks,
+    inventory: state.inventory,
+    spells: state.spells,
+  };
+  return d;
+}
+
+async function saveCharacter() {
+  if (!currentCharId) return;
+  try {
+    const d = getStateForSave();
+    await api('/characters/' + currentCharId, {
+      method: 'PUT',
+      body: JSON.stringify({ name: textFields.charName || 'Sin nombre', data: d })
+    });
+  } catch (err) { console.error('Error guardando:', err); }
+}
+
+function backToLobby() {
+  saveCharacter();
+  showScreen('lobby');
+  loadCharacters();
+}
+
+// ── Tables ────────────────────────────
+async function loadTables() {
+  const container = document.getElementById('tableListContainer');
+  container.innerHTML = '<div class="spinner"></div>';
+  try {
+    const data = await api('/tables');
+    if (data.tables.length === 0) {
+      container.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-style:italic;">No estás en ninguna mesa.</div>';
+      return;
+    }
+    container.innerHTML = data.tables.map(t => `
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="table-card-name">${t.name}</div>
+          <div class="table-card-code">${t.code}</div>
+        </div>
+        <div class="table-card-info">${t.player_count} jugador(es) · ${t.is_owner ? 'Dueño' : 'Miembro'} · ${t.status === 'combat' ? '⚔ En combate' : 'Lobby'}</div>
+        <div class="table-card-actions">
+          <button class="char-action-btn" onclick="openTable(${t.id})">Entrar</button>
+          ${t.is_owner && t.status === 'lobby' ? '<button class="char-action-btn" onclick="startCombat(' + t.id + ')">⚔ Iniciar Combate</button>' : ''}
+          ${t.is_owner && t.status === 'combat' ? '<button class="char-action-btn del" onclick="endCombat(' + t.id + ')">Terminar</button>' : ''}
+        </div>
+      </div>
+    `).join('');
+  } catch (err) { container.innerHTML = '<div style="color:var(--red2);padding:12px;">Error: ' + err.message + '</div>'; }
+}
+
+async function createTable() {
+  const name = document.getElementById('newTableName').value.trim();
+  if (!name) { showToast('Ponele un nombre a la mesa', true); return; }
+  try {
+    const data = await api('/tables', { method: 'POST', body: JSON.stringify({ name }) });
+    showToast('Mesa creada! Código: ' + data.table.code);
+    document.getElementById('newTableName').value = '';
+    loadTables();
+  } catch (err) { showToast(err.message, true); }
+}
+
+async function joinTableByCode() {
+  const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+  if (!code || code.length < 4) { showToast('Ingresá el código de la mesa', true); return; }
+  try {
+    // Find table
+    const found = await api('/tables/join/' + code);
+    // Need to select a character
+    const chars = await api('/characters');
+    if (chars.characters.length === 0) {
+      showToast('Creá una ficha primero', true);
+      return;
+    }
+    // Use first character or prompt
+    let charId;
+    if (chars.characters.length === 1) {
+      charId = chars.characters[0].id;
+    } else {
+      const names = chars.characters.map((c,i) => (i+1) + '. ' + c.name).join('\n');
+      const choice = prompt('¿Con qué personaje te unís?\n' + names + '\n\nIngresá el número:');
+      const idx = parseInt(choice) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= chars.characters.length) { showToast('Selección inválida', true); return; }
+      charId = chars.characters[idx].id;
+    }
+    await api('/tables/' + found.table.id + '/join', { method: 'POST', body: JSON.stringify({ character_id: charId }) });
+    showToast('Te uniste a ' + found.table.name);
+    document.getElementById('joinCodeInput').value = '';
+    loadTables();
+  } catch (err) { showToast(err.message, true); }
+}
+
+// ── Table / Combat ────────────────────
+async function openTable(tableId) {
+  try {
+    const data = await api('/tables/' + tableId);
+    combatState.tableId = tableId;
+    combatState.tableName = data.table.name;
+    combatState.isOwner = data.table.owner_id === currentUser.id;
+
+    if (data.table.status === 'combat' && data.combat && data.combat.status === 'active') {
+      enterCombatView(data);
+    } else {
+      // Show table details
+      const playerList = data.players.map(p => p.username + ' → ' + p.character_name).join('\n');
+      alert('Mesa: ' + data.table.name + '\nCódigo: ' + data.table.code + '\nEstado: ' + data.table.status + '\n\nJugadores:\n' + (playerList || '(vacío)'));
+    }
+  } catch (err) { showToast(err.message, true); }
+}
+
+async function startCombat(tableId) {
+  try {
+    const data = await api('/tables/' + tableId + '/combat/start', { method: 'POST' });
+    showToast('Combate iniciado!');
+    const tableData = await api('/tables/' + tableId);
+    combatState.tableId = tableId;
+    combatState.tableName = tableData.table.name;
+    combatState.isOwner = true;
+    enterCombatView(tableData);
+  } catch (err) { showToast(err.message, true); }
+}
+
+async function endCombat(tableId) {
+  if (!confirm('¿Terminar el combate?')) return;
+  try {
+    await api('/tables/' + tableId + '/combat/end', { method: 'POST' });
+    showToast('Combate finalizado');
+    loadTables();
+  } catch (err) { showToast(err.message, true); }
+}
+
+// ══════════════════════════════════════
+//  COMBAT VIEW
+// ══════════════════════════════════════
+function enterCombatView(data) {
+  showScreen('combat');
+  const combat = data.combat;
+  combatState.turnOrder = combat.turn_order || [];
+  combatState.currentTurn = combat.current_turn;
+  combatState.currentRound = combat.current_round;
+  combatState.log = data.log || [];
+
+  // Find my character in this table
+  const myPlayer = data.players.find(p => p.user_id === currentUser.id);
+  combatState.myCharacterId = myPlayer ? myPlayer.character_id : null;
+
+  // Build HP status from players
+  combatState.hpStatus = data.players.map(p => ({
+    character_id: p.character_id,
+    name: p.character_name,
+    user_id: p.user_id,
+    hpCurr: p.character_data.hpCurr || 0,
+    hpMax: p.character_data.hpMax || 1,
+    ac: parseInt(p.character_data.ac) || 10,
+    attacks: p.character_data.attacks || [],
+  }));
+
+  renderCombatView();
+  startCombatPolling();
+}
+
+function renderCombatView() {
+  document.getElementById('combatTableName').textContent = '⚔ ' + combatState.tableName;
+  document.getElementById('combatRound').textContent = 'Ronda ' + combatState.currentRound;
+
+  // Initiative tracker
+  const tracker = document.getElementById('initTracker');
+  tracker.innerHTML = combatState.turnOrder.map((t, i) => {
+    const hp = combatState.hpStatus.find(h => h.character_id === t.character_id);
+    const isCurrent = i === combatState.currentTurn;
+    const isDown = hp && hp.hpCurr <= 0;
+    return `<div class="init-token${isCurrent ? ' current' : ''}${isDown ? ' down' : ''}">
+      <div class="init-token-name">${t.character_name}</div>
+      <div class="init-token-hp">${hp ? hp.hpCurr + '/' + hp.hpMax : '?'}</div>
+      <div class="init-token-init">Init: ${t.total}</div>
+    </div>`;
+  }).join('');
+
+  // Whose turn?
+  const current = combatState.turnOrder[combatState.currentTurn];
+  if (!current) return;
+  const isMyTurn = current.user_id === currentUser.id;
+
+  document.getElementById('combatTurnName').textContent = current.character_name;
+  document.getElementById('combatMyTurnArea').style.display = isMyTurn ? 'block' : 'none';
+  document.getElementById('combatWaiting').style.display = isMyTurn ? 'none' : 'block';
+
+  if (isMyTurn) {
+    renderTargets();
+    renderWeapons();
+  }
+
+  renderCombatLog();
+}
+
+function renderTargets() {
+  const list = document.getElementById('targetList');
+  const targets = combatState.hpStatus.filter(h => h.character_id !== combatState.myCharacterId && h.hpCurr > 0);
+  list.innerHTML = targets.map(t => {
+    const pct = Math.max(0, (t.hpCurr / t.hpMax) * 100);
+    const sel = combatState.selectedTarget === t.character_id;
+    return `<div class="target-item${sel ? ' selected' : ''}" onclick="selectTarget(${t.character_id})">
+      <div><div class="target-name">${t.name}</div><div class="target-ac">CA ${t.ac}</div></div>
+      <div style="text-align:right;">
+        <div style="font-size:12px;color:var(--muted);">${t.hpCurr}/${t.hpMax}</div>
+        <div class="target-hp-bar"><div class="target-hp-fill" style="width:${pct}%;${pct < 25 ? 'background:var(--red2);' : pct < 50 ? 'background:var(--gold);' : ''}"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+  if (targets.length === 0) list.innerHTML = '<div style="color:var(--muted);font-style:italic;padding:8px;">No hay objetivos disponibles</div>';
+}
+
+function renderWeapons() {
+  const me = combatState.hpStatus.find(h => h.character_id === combatState.myCharacterId);
+  const weapons = me ? me.attacks : [];
+  const select = document.getElementById('weaponSelect');
+  if (weapons.length === 0) {
+    select.innerHTML = '<div class="weapon-option selected"><div class="weapon-name">Ataque sin arma</div><div class="weapon-stats">+0 · 1d4</div></div>';
+    return;
+  }
+  select.innerHTML = weapons.map((w, i) => `
+    <div class="weapon-option${combatState.selectedWeapon === i ? ' selected' : ''}" onclick="selectWeapon(${i})">
+      <div class="weapon-name">${w.name}</div>
+      <div class="weapon-stats">${w.bonus} · ${w.dmg}</div>
+    </div>
+  `).join('');
+}
+
+function selectTarget(charId) {
+  combatState.selectedTarget = charId;
+  renderTargets();
+  document.getElementById('attackBtn').disabled = false;
+}
+
+function selectWeapon(idx) {
+  combatState.selectedWeapon = idx;
+  renderWeapons();
+}
+
+async function performAttack() {
+  if (!combatState.selectedTarget) { showToast('Seleccioná un objetivo', true); return; }
+  const btn = document.getElementById('attackBtn');
+  btn.disabled = true;
+  btn.textContent = 'Atacando...';
+  try {
+    const data = await api('/tables/' + combatState.tableId + '/combat/attack', {
+      method: 'POST',
+      body: JSON.stringify({
+        defender_character_id: combatState.selectedTarget,
+        attack_index: combatState.selectedWeapon
+      })
+    });
+    showAttackResult(data.result);
+    // Update state
+    combatState.currentTurn = data.next_turn.turn_index;
+    combatState.currentRound = data.next_turn.round;
+    // Update HP
+    if (data.result.hits && data.result.defender_hp_remaining !== null) {
+      const hp = combatState.hpStatus.find(h => h.character_id === combatState.selectedTarget);
+      if (hp) hp.hpCurr = data.result.defender_hp_remaining;
+    }
+    combatState.selectedTarget = null;
+    combatState.selectedWeapon = 0;
+    renderCombatView();
+  } catch (err) { showToast(err.message, true); }
+  btn.disabled = false;
+  btn.textContent = '⚔ Atacar';
+}
+
+function showAttackResult(r) {
+  const splash = document.getElementById('attackSplash');
+  const cls = r.is_crit ? 'crit' : (r.hits ? 'hit' : 'miss');
+  splash.className = 'attack-result-splash show ' + cls;
+  let html = `<div class="splash-detail">${r.attacker} → ${r.defender} (${r.weapon})</div>`;
+  html += `<div class="splash-roll ${cls}">${r.attack_total}</div>`;
+  html += `<div class="splash-detail">d20(${r.attack_roll}) + ${r.attack_bonus} vs CA ${r.defender_ac}</div>`;
+  if (r.is_crit) html += '<div style="color:var(--gold2);font-family:Cinzel,serif;letter-spacing:3px;margin-top:4px;">✦ CRÍTICO ✦</div>';
+  if (r.is_fumble) html += '<div style="color:var(--red2);font-family:Cinzel,serif;letter-spacing:3px;margin-top:4px;">✖ PIFIA ✖</div>';
+  if (r.hits && r.damage) {
+    html += `<div class="splash-damage">−${r.damage.total} HP</div>`;
+    html += `<div class="splash-detail">${r.damage.formula} = ${r.damage.total}</div>`;
+    if (r.defender_down) html += '<div style="color:var(--red2);font-family:Cinzel,serif;font-size:14px;margin-top:8px;letter-spacing:2px;">☠ CAÍDO ☠</div>';
+  }
+  if (!r.hits) html += '<div class="splash-label" style="margin-top:8px;">Falla</div>';
+  splash.innerHTML = html;
+  setTimeout(() => { splash.className = 'attack-result-splash'; }, 5000);
+}
+
+async function passTurn() {
+  try {
+    const data = await api('/tables/' + combatState.tableId + '/combat/pass', { method: 'POST' });
+    combatState.currentTurn = data.next_turn.turn_index;
+    combatState.currentRound = data.next_turn.round;
+    renderCombatView();
+  } catch (err) { showToast(err.message, true); }
+}
+
+function renderCombatLog() {
+  const logEl = document.getElementById('combatLog');
+  logEl.innerHTML = combatState.log.map(l => {
+    const cls = l.hit ? (l.attack_roll === 20 ? 'crit' : 'hit') : 'miss';
+    let txt = `<span class="log-attacker">${l.attacker_name}</span> → <span class="log-defender">${l.defender_name}</span>: `;
+    txt += `d20(${l.attack_roll})+${l.attack_bonus}=${l.attack_total} vs CA${l.defender_ac} `;
+    if (l.hit) {
+      txt += `<span class="log-damage">→ ${l.damage_total} daño</span>`;
+      if (l.attack_roll === 20) txt += ' ✦CRIT';
+    } else {
+      txt += '<span class="log-miss-text">→ Falla</span>';
+    }
+    return `<div class="log-entry ${cls}">${txt}</div>`;
+  }).join('');
+}
+
+// Polling para actualizar el estado del combate
+function startCombatPolling() {
+  if (combatPollInterval) clearInterval(combatPollInterval);
+  combatPollInterval = setInterval(async () => {
+    try {
+      const data = await api('/tables/' + combatState.tableId);
+      if (data.table.status !== 'combat' || !data.combat || data.combat.status !== 'active') {
+        clearInterval(combatPollInterval);
+        combatPollInterval = null;
+        showToast('Combate finalizado');
+        showScreen('lobby');
+        loadTables();
+        return;
+      }
+      combatState.turnOrder = data.combat.turn_order || [];
+      combatState.currentTurn = data.combat.current_turn;
+      combatState.currentRound = data.combat.current_round;
+      combatState.log = data.log || [];
+      combatState.hpStatus = data.players.map(p => ({
+        character_id: p.character_id,
+        name: p.character_name,
+        user_id: p.user_id,
+        hpCurr: p.character_data.hpCurr || 0,
+        hpMax: p.character_data.hpMax || 1,
+        ac: parseInt(p.character_data.ac) || 10,
+        attacks: p.character_data.attacks || [],
+      }));
+      renderCombatView();
+    } catch (err) { /* silenciar errores de polling */ }
+  }, 3000);
+}
+
+function leaveCombatView() {
+  if (combatPollInterval) { clearInterval(combatPollInterval); combatPollInterval = null; }
+  showScreen('lobby');
+  loadTables();
+}
+
+// ══════════════════════════════════════
+//  CHARACTER SHEET LOGIC (original)
+// ══════════════════════════════════════
+const STAT_NAMES={str:'Fuerza',dex:'Destreza',con:'Constitución',int:'Inteligencia',wis:'Sabiduría',cha:'Carisma'};
+const SAVES=[{key:'str',label:'Fuerza'},{key:'dex',label:'Destreza'},{key:'con',label:'Constitución'},{key:'int',label:'Inteligencia'},{key:'wis',label:'Sabiduría'},{key:'cha',label:'Carisma'}];
+const SKILLS=[
+  {key:'acrobatics',label:'Acrobacias',stat:'dex'},{key:'animalHandling',label:'T. con Animales',stat:'wis'},
+  {key:'arcana',label:'C. Arcano',stat:'int'},{key:'athletics',label:'Atletismo',stat:'str'},
+  {key:'deception',label:'Engaño',stat:'cha'},{key:'history',label:'Historia',stat:'int'},
+  {key:'insight',label:'Perspicacia',stat:'wis'},{key:'intimidation',label:'Intimidación',stat:'cha'},
+  {key:'investigation',label:'Investigación',stat:'int'},{key:'medicine',label:'Medicina',stat:'wis'},
+  {key:'nature',label:'Naturaleza',stat:'int'},{key:'perception',label:'Percepción',stat:'wis'},
+  {key:'performance',label:'Interpretación',stat:'cha'},{key:'persuasion',label:'Persuasión',stat:'cha'},
+  {key:'religion',label:'Religión',stat:'int'},{key:'sleightOfHand',label:'Juego de Manos',stat:'dex'},
+  {key:'stealth',label:'Sigilo',stat:'dex'},{key:'survival',label:'Supervivencia',stat:'wis'},
+];
+
+function mod(s){return Math.floor((s-10)/2);}
+function fmt(v){return v>=0?'+'+v:''+v;}
+
+function renderStats(){
+  const g=document.getElementById('statsGrid'); g.innerHTML='';
+  for(const[key,val]of Object.entries(state.stats)){
+    const capped=val>=20; const m=mod(val); const mc=m>0?'plus':(m<0?'neg':'');
+    g.innerHTML+=`<div class="stat-box${capped?' capped':''}"><div class="stat-name">${STAT_NAMES[key]}</div><div class="stat-mod ${mc}${capped?' capped':''}">${fmt(m)}</div><div class="stat-score">${state.editMode?`<input type="number" min="1" max="20" value="${val}" onchange="updateStat('${key}',this.value)" style="width:48px;text-align:center;background:#0a0805;border:1px solid var(--gold);border-radius:4px;color:var(--text);font-size:13px;padding:2px;outline:none;">`:val+(capped?' ★':'')}</div></div>`;
+  }
+}
+function renderSaves(){
+  const el=document.getElementById('savesList'); el.innerHTML='';
+  for(const s of SAVES){ const prof=state.savingThrowProf.includes(s.key); const t=mod(state.stats[s.key])+(prof?state.profBonus:0); const c=t>0?'pos':(t<0?'neg':'');
+    const clickHandler=state.editMode?` onclick="toggleSaveProf('${s.key}')" style="cursor:pointer;"`:' style="cursor:default;"';
+    el.innerHTML+=`<div class="save-item ${prof?'proficient':''}"${clickHandler}><div class="save-check"></div><span class="save-val ${c}">${fmt(t)}</span><span class="save-name">${s.label}</span>${state.editMode?'<span style="font-size:9px;color:var(--muted);margin-left:auto;">click para toggle</span>':''}</div>`;
+  }
+}
+function renderSkills(){
+  const el=document.getElementById('skillsList'); el.innerHTML='';
+  for(const sk of SKILLS){ const prof=state.skillProf.includes(sk.key); const exp=state.skillExpertise.includes(sk.key); const bonus=exp?state.profBonus*2:(prof?state.profBonus:0); const t=mod(state.stats[sk.stat])+bonus; const c=t>0?'pos':(t<0?'neg':''); const ic=exp?'expertise':(prof?'proficient':'');
+    const clickHandler=state.editMode?` onclick="toggleSkillProf('${sk.key}')" style="cursor:pointer;"`:' style="cursor:default;"';
+    const tag=exp?'<span style="font-size:8px;color:var(--accent2);margin-left:auto;">EXP</span>':(prof&&state.editMode?'<span style="font-size:8px;color:var(--gold);margin-left:auto;">PROF</span>':'');
+    el.innerHTML+=`<div class="skill-item ${ic}"${clickHandler}><div class="skill-dot"></div><span class="skill-val ${c}">${fmt(t)}</span><span class="skill-name">${sk.label}</span><span class="skill-attr">${sk.stat.substring(0,3).toUpperCase()}</span>${state.editMode?tag:''}</div>`;
+  }
+  const pb=mod(state.stats.wis)+(state.skillProf.includes('perception')?state.profBonus:0);
+  document.getElementById('passivePerc').textContent='Percepción Pasiva: '+(10+pb);
+}
+function renderAttacks(){
+  const el=document.getElementById('attacksList'); el.innerHTML='';
+  const inpStyle='background:#0a0805;border:1px solid var(--gold);border-radius:4px;color:var(--text);font-family:"Cinzel",serif;font-size:12px;padding:3px 5px;width:100%;outline:none;';
+  state.attacks.forEach((atk,i)=>{
+    el.innerHTML+=`<div class="attack-row ${state.editMode?'edit':'view'}"><div class="attack-name">${state.editMode?`<input value="${atk.name}" onchange="state.attacks[${i}].name=this.value" style="${inpStyle}">`:atk.name}</div><div class="attack-bonus" style="text-align:center;">${state.editMode?`<input value="${atk.bonus}" onchange="state.attacks[${i}].bonus=this.value" style="width:46px;text-align:center;${inpStyle}">`:atk.bonus}</div><div class="attack-dmg">${state.editMode?`<input value="${atk.dmg}" onchange="state.attacks[${i}].dmg=this.value" style="${inpStyle}">`:atk.dmg}</div>${state.editMode?`<button class="del-btn" onclick="delAttack(${i})">✕</button>`:''}</div>`;
+  });
+}
+function renderInventory(){
+  const el=document.getElementById('invList'); el.innerHTML='';
+  const inpStyle='flex:1;background:#0a0805;border:1px solid var(--gold);border-radius:4px;color:var(--text);font-family:"Crimson Text",serif;font-size:14px;padding:3px 6px;outline:none;';
+  state.inventory.forEach((item,i)=>{
+    el.innerHTML+=`<div class="inv-item"><span class="inv-bullet">◆</span>${state.editMode?`<input value="${item}" onchange="state.inventory[${i}]=this.value" style="${inpStyle}"><button class="del-btn" onclick="delInvItem(${i})">✕</button>`:`<span class="inv-name">${item}</span>`}</div>`;
+  });
+}
+function renderSpellMeta(){
+  const abilityKey=state.spellAbilityKey||'int'; const abilityMod=mod(state.stats[abilityKey]); const saveDC=8+abilityMod+state.profBonus; const atkBonus=abilityMod+state.profBonus;
+  const dcEl=document.getElementById('spellSaveDC'); const atkEl=document.getElementById('spellAttackBonus');
+  if(dcEl) dcEl.textContent=saveDC; if(atkEl) atkEl.textContent=fmt(atkBonus);
+}
+function renderSpells(){
+  const el=document.getElementById('spellLevels'); if(!el)return; el.innerHTML=''; renderSpellMeta();
+  const lnames=['Trucos','Nivel 1','Nivel 2','Nivel 3','Nivel 4','Nivel 5','Nivel 6','Nivel 7','Nivel 8','Nivel 9'];
+  const inpStyle='flex:1;background:#0a0805;border:1px solid var(--accent);border-radius:4px;color:var(--text);font-family:"Crimson Text",serif;font-size:14px;padding:3px 6px;outline:none;';
+  for(let lvl=0;lvl<=9;lvl++){
+    const d=state.spells[lvl]; if(!d) continue;
+    if(!d.prep) d.prep=d.list.map(()=>false);
+    if(lvl>2&&!d.list.some(s=>s.trim())&&d.slots===0&&!state.editMode)continue;
+    let slots='';
+    if(lvl>0&&d.slots>0){ let dots=''; for(let i=0;i<d.slots;i++) dots+=`<div class="spell-slot ${i<d.used?'used':''}" onclick="toggleSlot(${lvl},${i})"></div>`; slots=`<div class="spell-slots-row">${dots}<span class="spell-slots-label">${d.used}/${d.slots}</span></div>`; }
+    const list=d.list.map((sp,i)=>{ if(!state.editMode&&!sp.trim())return''; const isPrepared=d.prep[i]||false;
+      return`<div class="spell-entry">${lvl>0?`<div class="spell-dot ${isPrepared?'prepared':''}" onclick="togglePrepared(${lvl},${i})"></div>`:''} ${state.editMode?`<input value="${sp}" placeholder="Nombre del conjuro..." onchange="state.spells[${lvl}].list[${i}]=this.value" style="${inpStyle}">`:`<span class="spell-name">${sp}</span>`}</div>`;
+    }).join('');
+    el.innerHTML+=`<div class="spell-level-block"><div class="spell-level-header"><span class="spell-level-num">${lvl}</span><span class="spell-level-title">${lnames[lvl]}</span>${slots} ${state.editMode&&lvl>0?`<input type="number" min="0" max="9" value="${d.slots}" onchange="state.spells[${lvl}].slots=+this.value;renderSpells()" style="width:34px;text-align:center;background:#0a0805;border:1px solid var(--accent);border-radius:4px;color:var(--text);font-size:12px;padding:2px;outline:none;">`:''}</div><div class="spell-list">${list||'<span style="color:var(--muted);font-size:13px;font-style:italic;">Sin conjuros</span>'}</div></div>`;
+  }
+}
+function renderHP(){
+  const hpCurrEl=document.getElementById('hpCurr');
+  const hpMaxEl=document.getElementById('hpMax');
+  const hpTempEl=document.getElementById('hpTemp');
+  const hpInpStyle='width:48px;text-align:center;background:#0a0805;border:1px solid var(--gold);border-radius:4px;color:var(--text);font-family:Cinzel,serif;font-size:13px;padding:2px;outline:none;';
+  if(state.editMode){
+    hpCurrEl.innerHTML=`<input type="number" min="0" value="${state.hpCurr}" onchange="state.hpCurr=Math.max(0,+this.value);renderHP();" style="${hpInpStyle}">`;
+    hpMaxEl.innerHTML=`<input type="number" min="1" value="${state.hpMax}" onchange="state.hpMax=Math.max(1,+this.value);state.hpCurr=Math.min(state.hpCurr,state.hpMax);renderHP();" style="${hpInpStyle}">`;
+    hpTempEl.innerHTML=`<input type="number" min="0" value="${state.hpTemp}" onchange="state.hpTemp=Math.max(0,+this.value);" style="${hpInpStyle}">`;
+  }else{
+    hpCurrEl.textContent=state.hpCurr;
+    hpMaxEl.textContent=state.hpMax;
+    hpTempEl.textContent=state.hpTemp;
+  }
+  const pct=Math.max(0,Math.min(100,(state.hpCurr/state.hpMax)*100)); const bar=document.getElementById('hpBar');
+  bar.style.width=pct+'%'; bar.style.background=pct>50?'linear-gradient(90deg,var(--hp-green),var(--hp-green2))':pct>25?'linear-gradient(90deg,#7a6020,var(--gold))':'linear-gradient(90deg,var(--red),var(--red2))';
+}
+
+let textFields={};
+function renderEditableFields(){
+  document.querySelectorAll('#appWrapper [data-field]').forEach(el=>{
+    if(el.tagName==='INPUT'||el.tagName==='TEXTAREA')return;
+    const key=el.getAttribute('data-field');
+    if(!textFields[key])textFields[key]=el.textContent.trim();
+    const val=textFields[key];
+    if(state.editMode){
+      const multi=el.classList.contains('text-block');
+      if(multi){ const ta=document.createElement('textarea'); ta.value=val; ta.className='ei'; ta.style.cssText+='resize:vertical;min-height:60px;'; ta.addEventListener('input',()=>{textFields[key]=ta.value;}); el.innerHTML=''; el.appendChild(ta); }
+      else{ const inp=document.createElement('input'); inp.value=val; inp.className='ei sm'; inp.addEventListener('input',()=>{ textFields[key]=inp.value; if(key==='charName')document.getElementById('headerName').textContent=inp.value.split('(')[0].trim(); }); el.innerHTML=''; el.appendChild(inp); }
+    }else{
+      el.textContent=val;
+      if(key==='charName')document.getElementById('headerName').textContent=val.split('(')[0].trim();
+    }
+  });
+}
+
+function renderAll(){
+  renderStats(); renderSaves(); renderSkills(); renderAttacks(); renderInventory(); renderSpells(); renderHP(); renderEditableFields(); renderSpellMeta();
+  const profEl=document.getElementById('profBonusDisp');
+  if(state.editMode){
+    profEl.innerHTML=`<input type="number" min="1" max="10" value="${state.profBonus}" onchange="state.profBonus=Math.max(1,Math.min(10,+this.value));renderAll();" style="width:42px;text-align:center;background:#0a0805;border:1px solid var(--gold);border-radius:4px;color:var(--gold2);font-family:Cinzel,serif;font-size:18px;padding:2px;outline:none;">`;
+  }else{
+    profEl.textContent=fmt(state.profBonus);
+  }
+}
+
+// Interactions
+function toggleEdit(){
+  if(state.editMode) saveCharacter(); // Auto-save on exit edit mode
+  state.editMode=!state.editMode;
+  const btn=document.getElementById('editToggle'); btn.textContent=state.editMode?'GUARDAR':'EDITAR'; btn.classList.toggle('active',state.editMode);
+  renderAll();
+}
+function switchTab(name,btn){ document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.getElementById('tab-'+name).classList.add('active'); btn.classList.add('active'); }
+function switchSub(name,btn){ document.querySelectorAll('.sub-content').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.sub-tab-btn').forEach(b=>b.classList.remove('active')); document.getElementById('sub-'+name).classList.add('active'); btn.classList.add('active'); }
+function toggleInspiration(){ state.inspiration=!state.inspiration; document.getElementById('inspBox').classList.toggle('lit',state.inspiration); document.getElementById('inspVal').textContent=state.inspiration?'✦':'—'; }
+function toggleDS(idx){ state.deathSaves[idx]=!state.deathSaves[idx]; const id=idx<3?'ds'+idx:'df'+(idx-3); document.getElementById(id).classList.toggle('filled',state.deathSaves[idx]); }
+function updateStat(key,val){ let v=Math.max(1,Math.min(20,parseInt(val)||1)); state.stats[key]=v; renderStats(); renderSaves(); renderSkills(); }
+function toggleSaveProf(key){
+  const idx=state.savingThrowProf.indexOf(key);
+  if(idx===-1) state.savingThrowProf.push(key);
+  else state.savingThrowProf.splice(idx,1);
+  renderSaves();
+}
+function toggleSkillProf(key){
+  const isProf=state.skillProf.includes(key);
+  const isExp=state.skillExpertise.includes(key);
+  if(!isProf&&!isExp){
+    // nada → proficiente
+    state.skillProf.push(key);
+  }else if(isProf&&!isExp){
+    // proficiente → expertise
+    state.skillExpertise.push(key);
+  }else{
+    // expertise → nada
+    state.skillProf=state.skillProf.filter(k=>k!==key);
+    state.skillExpertise=state.skillExpertise.filter(k=>k!==key);
+  }
+  renderSkills();
+}
+function changeHP(dir){ const inp=document.getElementById('hpChange'); const amt=parseInt(inp.value)||0; if(amt<=0)return; state.hpCurr=Math.max(0,Math.min(state.hpMax,state.hpCurr+dir*amt)); inp.value=''; renderHP(); }
+function toggleSlot(lvl,idx){ const d=state.spells[lvl]; d.used=idx<d.used?idx:idx+1; renderSpells(); }
+function addAttack(){ state.attacks.push({name:'Nueva arma',bonus:'+0',dmg:'1d6'}); renderAttacks(); }
+function delAttack(i){ state.attacks.splice(i,1); renderAttacks(); }
+function addInvItem(){ state.inventory.push('Nuevo objeto'); renderInventory(); }
+function delInvItem(i){ state.inventory.splice(i,1); renderInventory(); }
+function togglePrepared(lvl,idx){ if(!state.spells[lvl].prep) state.spells[lvl].prep=state.spells[lvl].list.map(()=>false); state.spells[lvl].prep[idx]=!state.spells[lvl].prep[idx]; renderSpells(); }
+
+// ══════════════════════════════════════
+//  DICE (original)
+// ══════════════════════════════════════
+const DICE=[2,4,6,8,10,12,20,100];
+function dieSVG(faces,selected){
+  const col=selected?'#e8c96a':'#6b5240';
+  const s={
+    2:`<ellipse cx="22" cy="22" rx="10" ry="18" fill="none" stroke="${col}" stroke-width="2"/><line x1="22" y1="4" x2="22" y2="40" stroke="${col}" stroke-width="1.5" stroke-dasharray="3,2"/>`,
+    4:`<polygon points="22,4 40,38 4,38" fill="none" stroke="${col}" stroke-width="2"/><line x1="22" y1="4" x2="22" y2="38" stroke="${col}" stroke-width="1" opacity=".4"/>`,
+    6:`<rect x="5" y="5" width="34" height="34" rx="5" fill="none" stroke="${col}" stroke-width="2"/>`,
+    8:`<polygon points="22,3 40,22 22,41 4,22" fill="none" stroke="${col}" stroke-width="2"/><line x1="4" y1="22" x2="40" y2="22" stroke="${col}" stroke-width="1" opacity=".4"/>`,
+    10:`<polygon points="22,3 38,15 32,36 12,36 6,15" fill="none" stroke="${col}" stroke-width="2"/><line x1="22" y1="3" x2="22" y2="36" stroke="${col}" stroke-width="1" opacity=".4"/>`,
+    12:`<polygon points="22,3 36,10 40,26 30,40 14,40 4,26 8,10" fill="none" stroke="${col}" stroke-width="2"/>`,
+    20:`<polygon points="22,3 40,14 40,32 22,42 4,32 4,14" fill="none" stroke="${col}" stroke-width="2"/><line x1="4" y1="14" x2="40" y2="14" stroke="${col}" stroke-width="1" opacity=".4"/><line x1="4" y1="32" x2="40" y2="32" stroke="${col}" stroke-width="1" opacity=".4"/>`,
+    100:`<circle cx="22" cy="22" r="18" fill="none" stroke="${col}" stroke-width="2"/><circle cx="22" cy="22" r="11" fill="none" stroke="${col}" stroke-width="1" opacity=".5"/><text x="22" y="26" text-anchor="middle" font-family="Cinzel,serif" font-size="9" fill="${col}">%</text>`,
+  };
+  return`<svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">${s[faces]||''}</svg>`;
+}
+const diceState={selected:null,qty:1,history:[],advMode:null};
+function renderDiceGrid(){
+  const grid=document.getElementById('diceGrid'); if(!grid)return; grid.innerHTML='';
+  DICE.forEach(function(d){ const sel=diceState.selected===d; const btn=document.createElement('button'); btn.className='die-btn'+(sel?' selected':'');
+    btn.innerHTML=`<div class="die-selected-badge"></div><div class="die-icon">${dieSVG(d,sel)}</div><div class="die-label">d${d}</div>`;
+    btn.addEventListener('click',function(){selectDie(d);}); grid.appendChild(btn);
+  });
+  const rollBtn=document.getElementById('rollBtn'); if(rollBtn)rollBtn.disabled=diceState.selected===null;
+}
+function selectDie(faces){ diceState.selected=diceState.selected===faces?null:faces; renderDiceGrid(); }
+function changeQty(delta){ diceState.qty=Math.max(1,Math.min(20,diceState.qty+delta)); const el=document.getElementById('diceQty'); if(el)el.textContent=diceState.qty; }
+function toggleAdvDis(mode){
+  diceState.advMode=diceState.advMode===mode?null:mode;
+  const advBtn=document.getElementById('advBtn'); const disBtn=document.getElementById('disBtn'); const note=document.getElementById('advNote');
+  if(advBtn) advBtn.className='adv-btn'+(diceState.advMode==='advantage'?' adv-active':'');
+  if(disBtn) disBtn.className='adv-btn'+(diceState.advMode==='disadvantage'?' dis-active':'');
+  if(note){ if(diceState.advMode==='advantage'){note.textContent='Se lanzan 2 dados — se toma el mayor';note.style.display='block';}else if(diceState.advMode==='disadvantage'){note.textContent='Se lanzan 2 dados — se toma el menor';note.style.display='block';}else{note.style.display='none';} }
+}
+function rollDice(){
+  const faces=diceState.selected; if(!faces)return;
+  const modRaw=parseInt(document.getElementById('diceMod').value)||0; const advMode=diceState.advMode;
+  if(advMode){
+    const qty=diceState.qty;
+    const rollA=Array.from({length:qty},function(){return Math.floor(Math.random()*faces)+1;});
+    const rollB=Array.from({length:qty},function(){return Math.floor(Math.random()*faces)+1;});
+    const sumA=rollA.reduce(function(a,b){return a+b;},0)+modRaw; const sumB=rollB.reduce(function(a,b){return a+b;},0)+modRaw;
+    const isAdv=advMode==='advantage'; const winnerIsA=isAdv?(sumA>=sumB):(sumA<=sumB); const finalVal=winnerIsA?sumA:sumB;
+    const formula=qty+'d'+faces+(modRaw!==0?(modRaw>0?' + '+modRaw:' − '+Math.abs(modRaw)):'');
+    function chipsHTML(rolls){return rolls.map(function(r){const cls=r===faces?'max':(r===1?'min':'');return'<div class="result-die-chip '+cls+'" style="font-size:14px;padding:4px 8px;">'+r+'</div>';}).join('');}
+    function blockHTML(rolls,total,isWinner){const disWin=!isAdv&&isWinner;return'<div class="adv-die-block'+(isWinner?' winner'+(disWin?' dis-win':''):' loser')+'">'+(isWinner?'<span class="adv-crown">'+(isAdv?'▲':'▼')+'</span>':'<span class="adv-crown" style="opacity:0">▲</span>')+'<div class="adv-block-label">Tirada '+(rolls===rollA?'A':'B')+'</div><div class="adv-block-dice">'+chipsHTML(rolls)+'</div>'+(modRaw!==0?'<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+(modRaw>0?'+':'')+modRaw+'</div>':'')+'<div class="adv-block-total">'+total+'</div></div>';}
+    const modeLabel=isAdv?'VENTAJA':'DESVENTAJA'; const area=document.getElementById('diceResultArea');
+    area.innerHTML='<div class="result-formula">'+formula+' — '+modeLabel+'</div><div class="adv-results-row">'+blockHTML(rollA,sumA,winnerIsA)+blockHTML(rollB,sumB,!winnerIsA)+'</div><div class="result-divider"></div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Resultado final</div><div class="result-total'+(isAdv?' critical':' fumble')+'" style="font-size:42px;">'+finalVal+'</div>';
+    diceState.history.unshift({formula:formula+' ('+modeLabel+')',rolls:[sumA-modRaw,sumB-modRaw],modRaw:modRaw,total:finalVal});
+    if(diceState.history.length>8)diceState.history.pop(); renderHistory(); return;
+  }
+  const qty=diceState.qty; const rolls=Array.from({length:qty},function(){return Math.floor(Math.random()*faces)+1;}); const sum=rolls.reduce(function(a,b){return a+b;},0); const total=sum+modRaw;
+  const isCrit=qty===1&&rolls[0]===faces; const isFumble=qty===1&&rolls[0]===1;
+  const modStr=modRaw!==0?(modRaw>0?' + '+modRaw:' − '+Math.abs(modRaw)):''; const formula=qty+'d'+faces+modStr;
+  const chips=rolls.map(function(r){const cls=r===faces?'max':(r===1?'min':'');return'<div class="result-die-chip '+cls+'">'+r+'</div>';}).join('');
+  var breakdown=''; if(qty>1||modRaw!==0){var rollStr=rolls.join(' + ');breakdown=modRaw!==0?'('+rollStr+') '+(modRaw>=0?'+':'−')+' '+Math.abs(modRaw):rollStr;}
+  const area=document.getElementById('diceResultArea'); if(!area)return;
+  area.innerHTML='<div class="result-formula">'+formula+'</div><div class="result-dice-row">'+chips+'</div>'+(breakdown?'<div class="result-divider"></div><div class="result-breakdown">'+breakdown+'</div>':'')+'<div class="result-total'+(isCrit?' critical':'')+(isFumble?' fumble':'')+'">'+total+'</div>'+(isCrit?'<div style="color:var(--gold2);font-size:12px;margin-top:6px;font-family:\'Cinzel\',serif;letter-spacing:3px;">✦ CRÍTICO ✦</div>':'')+(isFumble?'<div style="color:var(--red2);font-size:12px;margin-top:6px;font-family:\'Cinzel\',serif;letter-spacing:3px;">✖ PIFIA ✖</div>':'');
+  diceState.history.unshift({formula:formula,rolls:rolls,modRaw:modRaw,total:total}); if(diceState.history.length>8)diceState.history.pop(); renderHistory();
+}
+function renderHistory(){
+  const hist=document.getElementById('diceHistory'); const card=document.getElementById('historyCard'); if(!hist||!card)return;
+  if(diceState.history.length===0){card.style.display='none';return;} card.style.display='block';
+  hist.innerHTML=diceState.history.map(function(h,i){const rollsStr=h.rolls.length>1?' ['+h.rolls.join(', ')+']':'';return'<div class="history-item" style="'+(i===0?'':'opacity:.5;')+'"><span>'+h.formula+rollsStr+'</span><span class="history-total" style="'+(i===0?'color:var(--gold2)':'')+'">'+h.total+'</span></div>';}).join('');
+}
+function clearHistory(){ diceState.history=[]; renderHistory(); }
+
+// ══════════════════════════════════════
+//  INIT — check stored token
+// ══════════════════════════════════════
+(function init(){
+  const token = localStorage.getItem('dnd_token');
+  const user = localStorage.getItem('dnd_user');
+  if (token && user) {
+    currentToken = token;
+    currentUser = JSON.parse(user);
+    // Verify token is still valid
+    api('/auth/me').then(data => {
+      currentUser = data.user;
+      enterLobby();
+    }).catch(() => {
+      logout();
+    });
+  } else {
+    showScreen('auth');
+  }
+})();
