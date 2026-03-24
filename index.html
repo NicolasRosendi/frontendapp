@@ -108,32 +108,112 @@
       <div class="combat-turn-name" id="combatTurnName">—</div>
     </div>
     <div id="combatMyTurnArea" style="display:none;">
+      <!-- Modo de acción -->
+      <div class="section-label">Tipo de Acción</div>
+      <div style="display:flex;gap:4px;margin-bottom:12px;" id="combatModeRow">
+        <button class="adv-btn adv-active" id="modeAutoBtn" onclick="setCombatMode('auto')">⚔ Auto</button>
+        <button class="adv-btn" id="modeManualBtn" onclick="setCombatMode('manual')">🎲 Manual</button>
+        <button class="adv-btn" id="modeSpellBtn" onclick="setCombatMode('spell')">✦ Conjuro</button>
+      </div>
+
       <div class="section-label">Elegir Objetivo</div>
       <div class="target-list" id="targetList"></div>
-      <div class="section-label">Elegir Arma</div>
-      <div class="weapon-select" id="weaponSelect"></div>
-      <div class="combat-btn-row">
-        <button class="attack-btn" id="attackBtn" onclick="performAttack()" disabled>⚔ Atacar</button>
-        <button class="pass-btn" onclick="passTurn()">Pasar</button>
+
+      <!-- AUTO: elegir arma y atacar -->
+      <div id="combatAutoPanel">
+        <div class="section-label">Elegir Arma</div>
+        <div class="weapon-select" id="weaponSelect"></div>
+        <div class="combat-btn-row">
+          <button class="attack-btn" id="attackBtn" onclick="performAttack()" disabled>⚔ Atacar</button>
+          <button class="pass-btn" onclick="passTurn()">Pasar</button>
+        </div>
+      </div>
+
+      <!-- MANUAL: tirar ataque, luego daño -->
+      <div id="combatManualPanel" style="display:none;">
+        <div class="card">
+          <div class="card-title">Paso 1 — Tirada de Ataque</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <span class="dice-control-label" style="min-width:auto;">Bon. Ataque</span>
+            <input class="mod-input" id="manualAtkMod" type="number" placeholder="0" value="0" style="max-width:80px;">
+          </div>
+          <button class="roll-btn" id="manualAtkRollBtn" onclick="rollManualAttack()" disabled style="margin-bottom:8px;">🎲 Tirar Ataque (d20)</button>
+          <div class="dice-result-area" id="manualAtkResult" style="min-height:50px;">
+            <div class="result-empty" style="padding:8px 0;">Seleccioná objetivo y tirá</div>
+          </div>
+        </div>
+        <div class="card" id="manualDmgPanel" style="display:none;">
+          <div class="card-title">Paso 2 — Tirada de Daño</div>
+          <div class="dice-grid" id="manualDmgDiceGrid" style="margin-bottom:8px;"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <span class="dice-control-label" style="min-width:auto;">Cantidad</span>
+            <div class="qty-row">
+              <button class="qty-btn" onclick="changeManualDmgQty(-1)">−</button>
+              <span class="qty-display" id="manualDmgQty">1</span>
+              <button class="qty-btn" onclick="changeManualDmgQty(1)">+</button>
+            </div>
+            <span class="dice-control-label" style="min-width:auto;">Mod</span>
+            <input class="mod-input" id="manualDmgMod" type="number" placeholder="0" value="0" style="max-width:70px;">
+          </div>
+          <button class="roll-btn" id="manualDmgRollBtn" onclick="rollManualDamage()" disabled>🎲 Tirar Daño</button>
+          <div class="dice-result-area" id="manualDmgResult" style="min-height:50px;">
+            <div class="result-empty" style="padding:8px 0;">Seleccioná dado de daño</div>
+          </div>
+        </div>
+        <div class="combat-btn-row" style="margin-top:8px;">
+          <button class="pass-btn" onclick="passTurn()" style="flex:1;">Pasar Turno</button>
+        </div>
+      </div>
+
+      <!-- SPELL: pedir salvación al rival -->
+      <div id="combatSpellPanel" style="display:none;">
+        <div class="card">
+          <div class="card-title">Conjuro — Tirada de Salvación</div>
+          <div style="margin-bottom:8px;">
+            <span class="dice-control-label">Stat de salvación del rival</span>
+            <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;" id="spellSaveStatRow">
+              <button class="adv-btn" onclick="setSpellSaveStat('str')">FUE</button>
+              <button class="adv-btn" onclick="setSpellSaveStat('dex')">DES</button>
+              <button class="adv-btn" onclick="setSpellSaveStat('con')">CON</button>
+              <button class="adv-btn" onclick="setSpellSaveStat('int')">INT</button>
+              <button class="adv-btn" onclick="setSpellSaveStat('wis')">SAB</button>
+              <button class="adv-btn" onclick="setSpellSaveStat('cha')">CAR</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <span class="dice-control-label" style="min-width:auto;">Mi CD Conjuro</span>
+            <input class="mod-input" id="spellDCInput" type="number" placeholder="13" value="13" style="max-width:80px;">
+          </div>
+          <button class="roll-btn" id="spellSaveRollBtn" onclick="rollSpellSave()" disabled>✦ Forzar Salvación</button>
+          <div class="dice-result-area" id="spellSaveResult" style="min-height:50px;">
+            <div class="result-empty" style="padding:8px 0;">Seleccioná objetivo y stat</div>
+          </div>
+        </div>
+        <div class="card" id="spellDmgPanel" style="display:none;">
+          <div class="card-title">Daño del Conjuro</div>
+          <div class="dice-grid" id="spellDmgDiceGrid" style="margin-bottom:8px;"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <span class="dice-control-label" style="min-width:auto;">Cantidad</span>
+            <div class="qty-row">
+              <button class="qty-btn" onclick="changeSpellDmgQty(-1)">−</button>
+              <span class="qty-display" id="spellDmgQty">1</span>
+              <button class="qty-btn" onclick="changeSpellDmgQty(1)">+</button>
+            </div>
+            <span class="dice-control-label" style="min-width:auto;">Mod</span>
+            <input class="mod-input" id="spellDmgMod" type="number" placeholder="0" value="0" style="max-width:70px;">
+          </div>
+          <button class="roll-btn" id="spellDmgRollBtn" onclick="rollSpellDamage()" disabled>🎲 Tirar Daño</button>
+          <div class="dice-result-area" id="spellDmgResult" style="min-height:50px;">
+            <div class="result-empty" style="padding:8px 0;">Seleccioná dado de daño</div>
+          </div>
+        </div>
+        <div class="combat-btn-row" style="margin-top:8px;">
+          <button class="pass-btn" onclick="passTurn()" style="flex:1;">Pasar Turno</button>
+        </div>
       </div>
     </div>
     <div class="combat-waiting" id="combatWaiting" style="display:none;">Esperando turno del oponente...</div>
     <div class="attack-result-splash" id="attackSplash"></div>
-
-    <!-- Dados manuales en combate -->
-    <div class="section-label" style="margin-top:18px;">Dados Manuales</div>
-    <div class="card" id="combatDiceArea">
-      <div class="dice-grid" id="combatDiceGrid"></div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
-        <span class="dice-control-label" style="min-width:auto;">Mod</span>
-        <input class="mod-input" id="combatDiceMod" type="number" placeholder="0" value="0" style="max-width:70px;">
-        <button class="roll-btn" id="combatRollBtn" onclick="rollCombatDice()" disabled style="flex:1;margin-bottom:0;padding:10px;">🎲 Tirar</button>
-      </div>
-      <div class="dice-result-area" id="combatDiceResult" style="min-height:60px;">
-        <div class="result-empty" style="padding:12px 0;">Seleccioná un dado</div>
-      </div>
-    </div>
-
     <div class="section-label" style="margin-top:18px;">Log de Combate</div>
     <div class="combat-log" id="combatLog"></div>
   </div>
