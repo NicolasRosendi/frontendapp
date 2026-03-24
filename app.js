@@ -257,6 +257,7 @@ function getStateForSave() {
     ...textFields,
     inspiration: state.inspiration,
     deathSaves: state.deathSaves,
+    hasShield: state.hasShield,
     stats: state.stats,
     hpCurr: state.hpCurr,
     hpMax: state.hpMax,
@@ -912,6 +913,8 @@ function renderAll(){
   }else{
     profEl.textContent=fmt(state.profBonus);
   }
+  var shEl = document.getElementById('shieldToggle');
+if(shEl) shEl.textContent = state.hasShield ? 'Escudo ✓' : 'Escudo ✗';
 }
 
 // Interactions
@@ -931,6 +934,12 @@ function toggleSaveProf(key){
   if(idx===-1) state.savingThrowProf.push(key);
   else state.savingThrowProf.splice(idx,1);
   renderSaves();
+}
+function toggleShield(){
+  state.hasShield = !state.hasShield;
+  var el = document.getElementById('shieldToggle');
+  if(el) el.textContent = state.hasShield ? 'Escudo ✓' : 'Escudo ✗';
+  if(el) el.style.background = state.hasShield ? 'var(--tertiary-container)' : '';
 }
 function toggleSkillProf(key){
   const isProf=state.skillProf.includes(key);
