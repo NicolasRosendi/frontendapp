@@ -169,7 +169,11 @@
       <div id="combatSpellPanel" style="display:none;">
         <div class="card">
           <div class="card-title">Conjuro — Tirada de Salvación</div>
-          <div style="margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px;background:var(--surface-container-low,#1e1b19);">
+            <span style="font-family:Manrope,sans-serif;font-size:10px;color:var(--on-surface-muted);text-transform:uppercase;letter-spacing:1px;">Mi CD Conjuro:</span>
+            <span id="spellDCDisplay" style="font-family:Cinzel,serif;font-size:22px;font-weight:800;color:var(--tertiary,#d2bcff);">—</span>
+          </div>
+          <div style="margin-bottom:10px;">
             <span class="dice-control-label">Stat de salvación del rival</span>
             <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;" id="spellSaveStatRow">
               <button class="adv-btn" onclick="setSpellSaveStat('str')">FUE</button>
@@ -180,9 +184,12 @@
               <button class="adv-btn" onclick="setSpellSaveStat('cha')">CAR</button>
             </div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-            <span class="dice-control-label" style="min-width:auto;">Mi CD Conjuro</span>
-            <input class="mod-input" id="spellDCInput" type="number" placeholder="13" value="13" style="max-width:80px;">
+          <div style="margin-bottom:10px;">
+            <span class="dice-control-label">Si supera la salvación</span>
+            <div style="display:flex;gap:4px;margin-top:6px;">
+              <button class="adv-btn adv-active" id="spellSuccessNoneBtn" onclick="setSpellSaveOnSuccess('none')">Sin daño</button>
+              <button class="adv-btn" id="spellSuccessHalfBtn" onclick="setSpellSaveOnSuccess('half')">Mitad de daño</button>
+            </div>
           </div>
           <button class="roll-btn" id="spellSaveRollBtn" onclick="rollSpellSave()" disabled>✦ Forzar Salvación</button>
           <div class="dice-result-area" id="spellSaveResult" style="min-height:50px;">
@@ -190,7 +197,7 @@
           </div>
         </div>
         <div class="card" id="spellDmgPanel" style="display:none;">
-          <div class="card-title">Daño del Conjuro</div>
+          <div class="card-title" id="spellDmgPanelLabel">Daño del Conjuro</div>
           <div class="dice-grid" id="spellDmgDiceGrid" style="margin-bottom:8px;"></div>
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
             <span class="dice-control-label" style="min-width:auto;">Cantidad</span>
