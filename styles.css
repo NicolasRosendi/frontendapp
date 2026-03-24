@@ -1489,8 +1489,29 @@ textarea.ei { resize: vertical; min-height: 60px; }
   color: var(--on-surface-dim);
 }
 
-.enc-tags-wrap { display:flex; flex-wrap:wrap; gap:4px; }
-.enc-tag-clickable { cursor:pointer; transition:all .15s; }
-.enc-tag-clickable:hover { background:var(--surface-container-high); color:var(--primary); }
-.enc-feature-desc { width:100%; padding:10px; margin:4px 0 8px; background:var(--surface-container-low); font-family:'Crimson Text',serif; font-size:14px; line-height:1.6; color:var(--on-surface-dim); animation:fadeIn .2s ease; }
-.enc-feature-accent { border-left:2px solid var(--tertiary); }
+/* Expandable features & subclasses */
+.enc-tags-wrap { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; }
+.enc-tag-clickable {
+  cursor: pointer;
+  transition: all .15s;
+  display: inline-block;
+}
+.enc-tag-clickable:hover {
+  background: var(--surface-container-high);
+  color: var(--primary);
+}
+.enc-feature-desc {
+  width: 100%;
+  padding: 10px 12px;
+  margin: 4px 0 8px;
+  background: var(--surface-container-low);
+  font-family: 'Crimson Text', serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--on-surface-dim);
+  animation: fadeIn .2s ease;
+  border-left: 2px solid var(--primary-dim);
+}
+.enc-feature-accent {
+  border-left-color: var(--tertiary);
+}
