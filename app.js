@@ -599,17 +599,29 @@ async function performAttack() {
       })
     });
     showAttackResult(data.result);
-    // Update state
-    combatState.currentTurn = data.next_turn.turn_index;
-    combatState.currentRound = data.next_turn.round;
     // Update HP
     if (data.result.hits && data.result.defender_hp_remaining !== null) {
       const hp = combatState.hpStatus.find(h => h.character_id === combatState.selectedTarget);
       if (hp) hp.hpCurr = data.result.defender_hp_remaining;
     }
-    combatState.selectedTarget = null;
-    combatState.selectedWeapon = 0;
-    renderCombatView();
+    // Check if combat ended
+    if (data.combat_ended) {
+      if (combatPollInterval) { clearInterval(combatPollInterval); combatPollInterval = null; }
+      setTimeout(function() {
+        var msg = '¡Combate terminado!';
+        if (data.winner) msg += ' Ganador: ' + data.winner;
+        alert(msg);
+        showScreen('lobby');
+        loadTables();
+        loadPublicTables();
+      }, 2000);
+    } else {
+      combatState.currentTurn = data.next_turn.turn_index;
+      combatState.currentRound = data.next_turn.round;
+      combatState.selectedTarget = null;
+      combatState.selectedWeapon = 0;
+      renderCombatView();
+    }
   } catch (err) { showToast(err.message, true); }
   btn.disabled = false;
   btn.textContent = '⚔ Atacar';
