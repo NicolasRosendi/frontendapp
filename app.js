@@ -967,53 +967,272 @@ function clearHistory(){ diceState.history=[]; renderHistory(); }
 })();
 
 // ══════════════════════════════════════
-//  COMBAT DICE (manual rolls in combat)
+//  COMBAT MODES: Auto / Manual / Spell
 // ══════════════════════════════════════
-let combatDiceSelected = null;
+let combatMode = 'auto';
+let manualDmgDie = null;
+let manualDmgQty = 1;
+let spellSaveStat = null;
+let spellDmgDie = null;
+let spellDmgQty = 1;
 
-function renderCombatDiceGrid(){
-  const grid = document.getElementById('combatDiceGrid');
-  if(!grid) return;
+function setCombatMode(mode) {
+  combatMode = mode;
+  document.getElementById('modeAutoBtn').className = 'adv-btn' + (mode === 'auto' ? ' adv-active' : '');
+  document.getElementById('modeManualBtn').className = 'adv-btn' + (mode === 'manual' ? ' adv-active' : '');
+  document.getElementById('modeSpellBtn').className = 'adv-btn' + (mode === 'spell' ? ' adv-active' : '');
+  document.getElementById('combatAutoPanel').style.display = mode === 'auto' ? 'block' : 'none';
+  document.getElementById('combatManualPanel').style.display = mode === 'manual' ? 'block' : 'none';
+  document.getElementById('combatSpellPanel').style.display = mode === 'spell' ? 'block' : 'none';
+  // Reset sub-panels
+  if (mode === 'manual') {
+    document.getElementById('manualDmgPanel').style.display = 'none';
+    document.getElementById('manualAtkResult').innerHTML = '<div class="result-empty" style="padding:8px 0;">Seleccioná objetivo y tirá</div>';
+    renderManualDmgGrid();
+    updateManualAtkBtn();
+  }
+  if (mode === 'spell') {
+    spellSaveStat = null;
+    document.getElementById('spellDmgPanel').style.display = 'none';
+    document.getElementById('spellSaveResult').innerHTML = '<div class="result-empty" style="padding:8px 0;">Seleccioná objetivo y stat</div>';
+    renderSpellStatBtns();
+    renderSpellDmgGrid();
+    updateSpellSaveBtn();
+  }
+}
+
+// ── MANUAL ATTACK ─────────────────────
+function updateManualAtkBtn() {
+  var btn = document.getElementById('manualAtkRollBtn');
+  if (btn) btn.disabled = !combatState.selectedTarget;
+}
+
+function rollManualAttack() {
+  if (!combatState.selectedTarget) return;
+  var modRaw = parseInt(document.getElementById('manualAtkMod').value) || 0;
+  var roll = Math.floor(Math.random() * 20) + 1;
+  var total = roll + modRaw;
+  var isCrit = roll === 20;
+  var isFumble = roll === 1;
+  var target = combatState.hpStatus.find(function(h) { return h.character_id === combatState.selectedTarget; });
+  var targetAC = target ? target.ac : 10;
+  var hits = isCrit || (!isFumble && total >= targetAC);
+
+  var area = document.getElementById('manualAtkResult');
+  area.innerHTML =
+    '<div class="result-formula">d20 + ' + modRaw + ' vs CA ' + targetAC + '</div>' +
+    '<div class="result-dice-row"><div class="result-die-chip ' + (isCrit ? 'max' : '') + (isFumble ? 'min' : '') + '">' + roll + '</div></div>' +
+    '<div class="result-total' + (isCrit ? ' critical' : '') + (isFumble ? ' fumble' : '') + '" style="font-size:36px;">' + total + '</div>' +
+    (isCrit ? '<div style="color:var(--primary);font-size:11px;margin-top:4px;font-family:Cinzel,serif;letter-spacing:3px;">✦ CRÍTICO ✦</div>' : '') +
+    (isFumble ? '<div style="color:var(--red-bright,#d94f4f);font-size:11px;margin-top:4px;font-family:Cinzel,serif;letter-spacing:3px;">✖ PIFIA ✖</div>' : '') +
+    '<div style="margin-top:8px;font-family:Cinzel,serif;font-size:14px;color:' + (hits ? 'var(--green-bright)' : 'var(--on-surface-muted)') + ';">' + (hits ? '¡IMPACTA!' : 'FALLA') + '</div>';
+
+  if (hits) {
+    document.getElementById('manualDmgPanel').style.display = 'block';
+  } else {
+    document.getElementById('manualDmgPanel').style.display = 'none';
+    // Fallo: pasar turno automáticamente después de 1.5s
+    setTimeout(function() { passTurn(); }, 1500);
+  }
+}
+
+function renderManualDmgGrid() {
+  var grid = document.getElementById('manualDmgDiceGrid');
+  if (!grid) return;
   grid.innerHTML = '';
-  DICE.forEach(function(d){
-    const sel = combatDiceSelected === d;
-    const btn = document.createElement('button');
+  DICE.forEach(function(d) {
+    var sel = manualDmgDie === d;
+    var btn = document.createElement('button');
     btn.className = 'die-btn' + (sel ? ' selected' : '');
-    btn.innerHTML = '<div class="die-selected-badge"></div><div class="die-icon">' + dieSVG(d,sel) + '</div><div class="die-label">d' + d + '</div>';
-    btn.addEventListener('click', function(){
-      combatDiceSelected = combatDiceSelected === d ? null : d;
-      renderCombatDiceGrid();
+    btn.innerHTML = '<div class="die-selected-badge"></div><div class="die-icon">' + dieSVG(d, sel) + '</div><div class="die-label">d' + d + '</div>';
+    btn.addEventListener('click', function() {
+      manualDmgDie = manualDmgDie === d ? null : d;
+      renderManualDmgGrid();
     });
     grid.appendChild(btn);
   });
-  const rollBtn = document.getElementById('combatRollBtn');
-  if(rollBtn) rollBtn.disabled = combatDiceSelected === null;
+  var rollBtn = document.getElementById('manualDmgRollBtn');
+  if (rollBtn) rollBtn.disabled = manualDmgDie === null;
 }
 
-function rollCombatDice(){
-  const faces = combatDiceSelected;
-  if(!faces) return;
-  const modRaw = parseInt(document.getElementById('combatDiceMod').value) || 0;
-  const roll = Math.floor(Math.random() * faces) + 1;
-  const total = roll + modRaw;
-  const isCrit = roll === faces;
-  const isFumble = roll === 1;
-  const modStr = modRaw !== 0 ? (modRaw > 0 ? ' + ' + modRaw : ' − ' + Math.abs(modRaw)) : '';
+function changeManualDmgQty(delta) {
+  manualDmgQty = Math.max(1, Math.min(20, manualDmgQty + delta));
+  var el = document.getElementById('manualDmgQty');
+  if (el) el.textContent = manualDmgQty;
+}
 
-  const area = document.getElementById('combatDiceResult');
-  if(!area) return;
+async function rollManualDamage() {
+  if (!manualDmgDie || !combatState.selectedTarget) return;
+  var modRaw = parseInt(document.getElementById('manualDmgMod').value) || 0;
+  var rolls = [];
+  for (var i = 0; i < manualDmgQty; i++) rolls.push(Math.floor(Math.random() * manualDmgDie) + 1);
+  var sum = rolls.reduce(function(a, b) { return a + b; }, 0);
+  var total = Math.max(0, sum + modRaw);
+
+  var area = document.getElementById('manualDmgResult');
+  var chips = rolls.map(function(r) { return '<div class="result-die-chip' + (r === manualDmgDie ? ' max' : '') + (r === 1 ? ' min' : '') + '">' + r + '</div>'; }).join('');
   area.innerHTML =
-    '<div class="result-formula">1d' + faces + modStr + '</div>' +
-    '<div class="result-dice-row"><div class="result-die-chip ' + (isCrit?'max':'') + (isFumble?'min':'') + '">' + roll + '</div></div>' +
-    (modRaw !== 0 ? '<div class="result-breakdown">' + roll + (modRaw >= 0 ? ' + ' : ' − ') + Math.abs(modRaw) + '</div>' : '') +
-    '<div class="result-total' + (isCrit?' critical':'') + (isFumble?' fumble':'') + '" style="font-size:36px;">' + total + '</div>' +
-    (isCrit ? '<div style="color:var(--primary);font-size:11px;margin-top:4px;font-family:Cinzel,serif;letter-spacing:3px;">✦ CRÍTICO ✦</div>' : '') +
-    (isFumble ? '<div style="color:var(--red-bright,#d94f4f);font-size:11px;margin-top:4px;font-family:Cinzel,serif;letter-spacing:3px;">✖ PIFIA ✖</div>' : '');
+    '<div class="result-formula">' + manualDmgQty + 'd' + manualDmgDie + (modRaw ? (modRaw > 0 ? '+' : '') + modRaw : '') + '</div>' +
+    '<div class="result-dice-row">' + chips + '</div>' +
+    '<div class="result-total" style="font-size:36px;color:var(--red-bright);">' + total + ' daño</div>';
+
+  // Aplicar daño al servidor
+  try {
+    var desc = manualDmgQty + 'd' + manualDmgDie + (modRaw ? (modRaw > 0 ? '+' : '') + modRaw : '');
+    var data = await api('/tables/' + combatState.tableId + '/combat/manual-damage', {
+      method: 'POST',
+      body: JSON.stringify({ defender_character_id: combatState.selectedTarget, damage: total, description: desc })
+    });
+    var hp = combatState.hpStatus.find(function(h) { return h.character_id === combatState.selectedTarget; });
+    if (hp) hp.hpCurr = data.defender_hp;
+
+    if (data.combat_ended) {
+      if (combatPollInterval) { clearInterval(combatPollInterval); combatPollInterval = null; }
+      setTimeout(function() {
+        var msg = '¡Combate terminado!';
+        if (data.winner) msg += ' Ganador: ' + data.winner;
+        alert(msg);
+        showScreen('lobby'); loadTables(); loadPublicTables();
+      }, 2000);
+    } else {
+      combatState.currentTurn = data.next_turn.turn_index;
+      combatState.currentRound = data.next_turn.round;
+      combatState.selectedTarget = null;
+      setTimeout(function() { renderCombatView(); }, 1500);
+    }
+  } catch (err) { showToast(err.message, true); }
 }
 
-// Render combat dice when entering combat view
+// ── SPELL (SAVING THROW) ─────────────
+function renderSpellStatBtns() {
+  var row = document.getElementById('spellSaveStatRow');
+  if (!row) return;
+  var stats = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+  var labels = ['FUE', 'DES', 'CON', 'INT', 'SAB', 'CAR'];
+  row.innerHTML = stats.map(function(s, i) {
+    return '<button class="adv-btn' + (spellSaveStat === s ? ' adv-active' : '') + '" onclick="setSpellSaveStat(\'' + s + '\')" style="flex:1;">' + labels[i] + '</button>';
+  }).join('');
+}
+
+function setSpellSaveStat(stat) {
+  spellSaveStat = stat;
+  renderSpellStatBtns();
+  updateSpellSaveBtn();
+}
+
+function updateSpellSaveBtn() {
+  var btn = document.getElementById('spellSaveRollBtn');
+  if (btn) btn.disabled = !combatState.selectedTarget || !spellSaveStat;
+}
+
+async function rollSpellSave() {
+  if (!combatState.selectedTarget || !spellSaveStat) return;
+  var spellDC = parseInt(document.getElementById('spellDCInput').value) || 13;
+
+  try {
+    var data = await api('/tables/' + combatState.tableId + '/combat/saving-throw', {
+      method: 'POST',
+      body: JSON.stringify({ defender_character_id: combatState.selectedTarget, stat: spellSaveStat, spell_dc: spellDC })
+    });
+
+    var area = document.getElementById('spellSaveResult');
+    var success = data.success;
+    area.innerHTML =
+      '<div class="result-formula">Salvación de ' + data.stat_name + ' — CD ' + spellDC + '</div>' +
+      '<div class="result-dice-row"><div class="result-die-chip' + (data.roll === 20 ? ' max' : '') + (data.roll === 1 ? ' min' : '') + '">' + data.roll + '</div></div>' +
+      '<div style="font-size:11px;color:var(--on-surface-muted);">d20(' + data.roll + ') + ' + data.stat_mod + (data.prof_bonus ? ' + ' + data.prof_bonus + ' prof' : '') + ' = ' + data.total + '</div>' +
+      '<div class="result-total" style="font-size:32px;color:' + (success ? 'var(--green-bright)' : 'var(--red-bright)') + ';">' + data.total + '</div>' +
+      '<div style="margin-top:6px;font-family:Cinzel,serif;font-size:13px;color:' + (success ? 'var(--green-bright)' : 'var(--red-bright)') + ';">' + (success ? '✓ SALVACIÓN EXITOSA' : '✖ FALLA LA SALVACIÓN') + '</div>';
+
+    if (!success) {
+      document.getElementById('spellDmgPanel').style.display = 'block';
+    } else {
+      document.getElementById('spellDmgPanel').style.display = 'none';
+      // Salvación exitosa: pasar turno
+      setTimeout(function() { passTurn(); }, 2000);
+    }
+  } catch (err) { showToast(err.message, true); }
+}
+
+function renderSpellDmgGrid() {
+  var grid = document.getElementById('spellDmgDiceGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  DICE.forEach(function(d) {
+    var sel = spellDmgDie === d;
+    var btn = document.createElement('button');
+    btn.className = 'die-btn' + (sel ? ' selected' : '');
+    btn.innerHTML = '<div class="die-selected-badge"></div><div class="die-icon">' + dieSVG(d, sel) + '</div><div class="die-label">d' + d + '</div>';
+    btn.addEventListener('click', function() {
+      spellDmgDie = spellDmgDie === d ? null : d;
+      renderSpellDmgGrid();
+    });
+    grid.appendChild(btn);
+  });
+  var rollBtn = document.getElementById('spellDmgRollBtn');
+  if (rollBtn) rollBtn.disabled = spellDmgDie === null;
+}
+
+function changeSpellDmgQty(delta) {
+  spellDmgQty = Math.max(1, Math.min(20, spellDmgQty + delta));
+  var el = document.getElementById('spellDmgQty');
+  if (el) el.textContent = spellDmgQty;
+}
+
+async function rollSpellDamage() {
+  if (!spellDmgDie || !combatState.selectedTarget) return;
+  var modRaw = parseInt(document.getElementById('spellDmgMod').value) || 0;
+  var rolls = [];
+  for (var i = 0; i < spellDmgQty; i++) rolls.push(Math.floor(Math.random() * spellDmgDie) + 1);
+  var sum = rolls.reduce(function(a, b) { return a + b; }, 0);
+  var total = Math.max(0, sum + modRaw);
+
+  var area = document.getElementById('spellDmgResult');
+  var chips = rolls.map(function(r) { return '<div class="result-die-chip' + (r === spellDmgDie ? ' max' : '') + (r === 1 ? ' min' : '') + '">' + r + '</div>'; }).join('');
+  area.innerHTML =
+    '<div class="result-formula">' + spellDmgQty + 'd' + spellDmgDie + (modRaw ? (modRaw > 0 ? '+' : '') + modRaw : '') + '</div>' +
+    '<div class="result-dice-row">' + chips + '</div>' +
+    '<div class="result-total" style="font-size:36px;color:var(--red-bright);">' + total + ' daño</div>';
+
+  try {
+    var desc = 'Conjuro ' + spellDmgQty + 'd' + spellDmgDie + (modRaw ? (modRaw > 0 ? '+' : '') + modRaw : '');
+    var data = await api('/tables/' + combatState.tableId + '/combat/manual-damage', {
+      method: 'POST',
+      body: JSON.stringify({ defender_character_id: combatState.selectedTarget, damage: total, description: desc })
+    });
+    var hp = combatState.hpStatus.find(function(h) { return h.character_id === combatState.selectedTarget; });
+    if (hp) hp.hpCurr = data.defender_hp;
+
+    if (data.combat_ended) {
+      if (combatPollInterval) { clearInterval(combatPollInterval); combatPollInterval = null; }
+      setTimeout(function() {
+        var msg = '¡Combate terminado!';
+        if (data.winner) msg += ' Ganador: ' + data.winner;
+        alert(msg);
+        showScreen('lobby'); loadTables(); loadPublicTables();
+      }, 2000);
+    } else {
+      combatState.currentTurn = data.next_turn.turn_index;
+      combatState.currentRound = data.next_turn.round;
+      combatState.selectedTarget = null;
+      setTimeout(function() { renderCombatView(); }, 1500);
+    }
+  } catch (err) { showToast(err.message, true); }
+}
+
+// Override selectTarget to also update manual/spell buttons
+var _origSelectTarget = selectTarget;
+selectTarget = function(charId) {
+  _origSelectTarget(charId);
+  updateManualAtkBtn();
+  updateSpellSaveBtn();
+};
+
+// Render grids when entering combat
 var _origEnterCombat = enterCombatView;
 enterCombatView = function(data) {
   _origEnterCombat(data);
-  renderCombatDiceGrid();
+  setCombatMode('auto');
+  renderManualDmgGrid();
+  renderSpellDmgGrid();
 };
