@@ -1774,7 +1774,6 @@ function onRaceChanged(raceName) {
   var subraceEl = document.getElementById('subraceField');
   if (!container || !subraceEl) return;
 
-  // Find race in encyclopedia data
   var raceData = null;
   if (ENCYCLOPEDIA_DATA && ENCYCLOPEDIA_DATA.races) {
     raceData = ENCYCLOPEDIA_DATA.races.find(function(r) { return r.name === raceName; });
@@ -1802,7 +1801,7 @@ function onRaceChanged(raceName) {
     });
     sel.addEventListener('change', function() {
       textFields['subrace'] = sel.value;
-      showToast('Subraza: ' + sel.value);
+      applyRacialBonuses(raceName, sel.value);
     });
     subraceEl.innerHTML = '';
     subraceEl.appendChild(sel);
@@ -1811,9 +1810,39 @@ function onRaceChanged(raceName) {
     subraceEl.textContent = textFields['subrace'];
   } else {
     container.style.display = 'none';
+    // Apply base race bonus if no subraces
+    applyRacialBonuses(raceName, '');
   }
 
   showToast('Raza: ' + raceName);
+}
+
+function applyRacialBonuses(raceName, subraceName) {
+  if (typeof RACIAL_BONUSES === 'undefined') return;
+
+  // Reset stats to base 10 first (so we don't stack bonuses)
+  // Only reset if explicitly changing race
+  state.stats = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+
+  // Apply subrace bonus if available (includes base race bonus)
+  var key = subraceName || raceName;
+  var bonuses = RACIAL_BONUSES[key];
+  if (!bonuses && subraceName) {
+    // Try base race
+    bonuses = RACIAL_BONUSES[raceName];
+  }
+
+  if (bonuses) {
+    Object.keys(bonuses).forEach(function(stat) {
+      state.stats[stat] = (state.stats[stat] || 10) + bonuses[stat];
+    });
+    // Build description
+    var statNames = {str:'FUE',dex:'DES',con:'CON',int:'INT',wis:'SAB',cha:'CAR'};
+    var desc = Object.keys(bonuses).map(function(s) { return statNames[s] + ' +' + bonuses[s]; }).join(', ');
+    showToast('Bonificaciones raciales aplicadas: ' + desc);
+  }
+
+  renderAll();
 }
 
 function goToClassSpells() {
