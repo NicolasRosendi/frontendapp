@@ -1312,3 +1312,179 @@ textarea.ei { resize: vertical; min-height: 60px; }
 .adv-die-block.winner .adv-block-total { color: var(--primary); }
 .adv-die-block.winner.dis-win .adv-block-total { color: var(--red-bright); }
 .adv-crown { font-size: 16px; display: block; margin-bottom: 2px; }
+
+/* ══════════════════════════════════════
+   ENCYCLOPEDIA
+   ══════════════════════════════════════ */
+.enc-section-title {
+  font-family: 'Cinzel', serif;
+  font-size: 20px; font-weight: 900;
+  color: var(--primary);
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  background-image: linear-gradient(90deg, var(--primary-dim), transparent);
+  background-size: 100% 1px;
+  background-position: bottom;
+  background-repeat: no-repeat;
+  letter-spacing: 1px;
+}
+
+/* Spell cards */
+.enc-spell-card {
+  background: var(--surface-container);
+  margin-bottom: 4px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all .15s;
+  border-left: 3px solid var(--outline-variant);
+}
+.enc-spell-card:hover { background: var(--surface-container-high); }
+.enc-spell-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.enc-spell-icon {
+  font-size: 20px;
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.enc-spell-info { flex: 1; min-width: 0; }
+.enc-spell-name {
+  font-family: 'Cinzel', serif;
+  font-size: 14px; font-weight: 700;
+  color: var(--on-surface);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.enc-spell-meta {
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px; font-weight: 500;
+  color: var(--on-surface-muted);
+  margin-top: 2px;
+}
+.enc-spell-level {
+  font-family: 'Cinzel', serif;
+  font-size: 22px; font-weight: 900;
+  flex-shrink: 0;
+  min-width: 28px;
+  text-align: center;
+}
+
+/* Expanded spell details */
+.enc-spell-details {
+  margin-top: 12px;
+  padding-top: 10px;
+  background-image: linear-gradient(90deg, transparent, var(--outline-variant), transparent);
+  background-size: 100% 1px;
+  background-position: top;
+  background-repeat: no-repeat;
+  animation: fadeIn .2s ease;
+}
+.enc-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 0;
+  font-family: 'Crimson Text', serif;
+  font-size: 14px;
+  color: var(--on-surface);
+}
+.enc-detail-label {
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px; font-weight: 600;
+  color: var(--on-surface-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+  margin-right: 12px;
+}
+.enc-spell-desc {
+  margin-top: 10px;
+  font-family: 'Crimson Text', serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--on-surface-dim);
+  padding: 10px;
+  background: var(--surface-container-low);
+}
+
+/* Class / Race cards */
+.enc-class-card {
+  background: var(--surface-container);
+  margin-bottom: 8px;
+  padding: 16px;
+  border-left: 3px solid var(--primary-dim);
+}
+.enc-class-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  background-image: linear-gradient(90deg, var(--outline-variant), transparent);
+  background-size: 100% 1px;
+  background-position: bottom;
+  background-repeat: no-repeat;
+}
+.enc-class-name {
+  font-family: 'Cinzel', serif;
+  font-size: 18px; font-weight: 800;
+  color: var(--primary);
+}
+.enc-class-die {
+  font-family: 'Cinzel', serif;
+  font-size: 16px; font-weight: 700;
+  color: var(--tertiary);
+  background: var(--surface-container-low);
+  padding: 4px 10px;
+}
+.enc-class-section {
+  font-family: 'Manrope', sans-serif;
+  font-size: 9px; font-weight: 600;
+  color: var(--on-surface-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-top: 10px;
+  margin-bottom: 6px;
+}
+
+/* Tags */
+.enc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.enc-tag {
+  font-family: 'Manrope', sans-serif;
+  font-size: 11px; font-weight: 500;
+  color: var(--on-surface-dim);
+  background: var(--surface-container-low);
+  padding: 4px 10px;
+}
+.enc-tag-accent {
+  color: var(--tertiary);
+  background: rgba(76, 42, 140, 0.15);
+}
+
+/* Rule cards */
+.enc-rule-card {
+  background: var(--surface-container);
+  margin-bottom: 6px;
+  padding: 14px 16px;
+  border-left: 3px solid var(--primary-dim);
+}
+.enc-rule-title {
+  font-family: 'Cinzel', serif;
+  font-size: 15px; font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 8px;
+}
+.enc-rule-content {
+  font-family: 'Crimson Text', serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--on-surface-dim);
+}
