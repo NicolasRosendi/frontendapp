@@ -15,6 +15,7 @@ let combatPollInterval = null;
 const state = {
   editMode: false,
   inspiration: false,
+  hasShield: false,
   deathSaves: [false,false,false,false,false,false],
   stats: { str:10, dex:10, con:10, int:10, wis:10, cha:10 },
   hpCurr:10, hpMax:10, hpTemp:0,
@@ -232,6 +233,7 @@ function ensureSpells(spells) {
 function loadStateFromData(d, name) {
   state.editMode = false;
   state.inspiration = d.inspiration || false;
+  state.hasShield = d.hasShield || false;
   state.deathSaves = d.deathSaves || [false,false,false,false,false,false];
   state.stats = d.stats || { str:10, dex:10, con:10, int:10, wis:10, cha:10 };
   state.hpCurr = d.hpCurr !== undefined ? d.hpCurr : 10;
@@ -256,8 +258,8 @@ function getStateForSave() {
   const d = {
     ...textFields,
     inspiration: state.inspiration,
-    deathSaves: state.deathSaves,
     hasShield: state.hasShield,
+    deathSaves: state.deathSaves,
     stats: state.stats,
     hpCurr: state.hpCurr,
     hpMax: state.hpMax,
@@ -913,8 +915,12 @@ function renderAll(){
   }else{
     profEl.textContent=fmt(state.profBonus);
   }
-  var shEl = document.getElementById('shieldToggle');
-if(shEl) shEl.textContent = state.hasShield ? 'Escudo ✓' : 'Escudo ✗';
+  // Shield toggle state
+  var shEl=document.getElementById('shieldToggle');
+  if(shEl){
+    shEl.textContent=state.hasShield?'Escudo ✓':'Escudo ✗';
+    shEl.style.background=state.hasShield?'var(--tertiary-container,#4c2a8c)':'';
+  }
 }
 
 // Interactions
@@ -927,6 +933,14 @@ function toggleEdit(){
 function switchTab(name,btn){ document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.getElementById('tab-'+name).classList.add('active'); btn.classList.add('active'); }
 function switchSub(name,btn){ document.querySelectorAll('.sub-content').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.sub-tab-btn').forEach(b=>b.classList.remove('active')); document.getElementById('sub-'+name).classList.add('active'); btn.classList.add('active'); }
 function toggleInspiration(){ state.inspiration=!state.inspiration; document.getElementById('inspBox').classList.toggle('lit',state.inspiration); document.getElementById('inspVal').textContent=state.inspiration?'✦':'—'; }
+function toggleShield(){
+  state.hasShield=!state.hasShield;
+  var el=document.getElementById('shieldToggle');
+  if(el){
+    el.textContent=state.hasShield?'Escudo ✓':'Escudo ✗';
+    el.style.background=state.hasShield?'var(--tertiary-container,#4c2a8c)':'';
+  }
+}
 function toggleDS(idx){ state.deathSaves[idx]=!state.deathSaves[idx]; const id=idx<3?'ds'+idx:'df'+(idx-3); document.getElementById(id).classList.toggle('filled',state.deathSaves[idx]); }
 function updateStat(key,val){ let v=Math.max(1,Math.min(20,parseInt(val)||1)); state.stats[key]=v; renderStats(); renderSaves(); renderSkills(); }
 function toggleSaveProf(key){
@@ -934,12 +948,6 @@ function toggleSaveProf(key){
   if(idx===-1) state.savingThrowProf.push(key);
   else state.savingThrowProf.splice(idx,1);
   renderSaves();
-}
-function toggleShield(){
-  state.hasShield = !state.hasShield;
-  var el = document.getElementById('shieldToggle');
-  if(el) el.textContent = state.hasShield ? 'Escudo ✓' : 'Escudo ✗';
-  if(el) el.style.background = state.hasShield ? 'var(--tertiary-container)' : '';
 }
 function toggleSkillProf(key){
   const isProf=state.skillProf.includes(key);
@@ -1535,10 +1543,41 @@ function renderEncSpells(container, countEl) {
   }).join('');
 }
 
+var encExpandedFeature = null; // 'class:feat' or 'class:sub:name'
+
+function toggleEncFeature(key) {
+  encExpandedFeature = encExpandedFeature === key ? null : key;
+  renderEncyclopedia();
+}
+
 function renderEncClasses(container) {
   var classes = ENCYCLOPEDIA_DATA.classes;
   container.innerHTML = '<div class="enc-section-title">Clases de Personaje</div>' +
     classes.map(function(c) {
+      var featuresHTML = '';
+      if (typeof c.features === 'object' && !Array.isArray(c.features)) {
+        featuresHTML = Object.keys(c.features).map(function(fname) {
+          var key = c.name + ':feat:' + fname;
+          var expanded = encExpandedFeature === key;
+          return '<div class="enc-tag enc-tag-clickable" onclick="event.stopPropagation();toggleEncFeature(\'' + key.replace(/'/g,"\\'") + '\')">' + fname + (expanded ? ' ▾' : ' ▸') + '</div>' +
+            (expanded ? '<div class="enc-feature-desc">' + c.features[fname] + '</div>' : '');
+        }).join('');
+      } else if (Array.isArray(c.features)) {
+        featuresHTML = c.features.map(function(f) { return '<span class="enc-tag">' + f + '</span>'; }).join('');
+      }
+
+      var subHTML = '';
+      if (typeof c.subclasses === 'object' && !Array.isArray(c.subclasses)) {
+        subHTML = Object.keys(c.subclasses).map(function(sname) {
+          var key = c.name + ':sub:' + sname;
+          var expanded = encExpandedFeature === key;
+          return '<div class="enc-tag enc-tag-accent enc-tag-clickable" onclick="event.stopPropagation();toggleEncFeature(\'' + key.replace(/'/g,"\\'") + '\')">' + sname + (expanded ? ' ▾' : ' ▸') + '</div>' +
+            (expanded ? '<div class="enc-feature-desc enc-feature-accent">' + c.subclasses[sname] + '</div>' : '');
+        }).join('');
+      } else if (Array.isArray(c.subclasses)) {
+        subHTML = c.subclasses.map(function(s) { return '<span class="enc-tag enc-tag-accent">' + s + '</span>'; }).join('');
+      }
+
       return '<div class="enc-class-card">' +
         '<div class="enc-class-header">' +
           '<div class="enc-class-name">' + c.name + '</div>' +
@@ -1548,10 +1587,10 @@ function renderEncClasses(container) {
         '<div class="enc-detail-row"><span class="enc-detail-label">Salvaciones</span><span>' + c.saves + '</span></div>' +
         '<div class="enc-detail-row"><span class="enc-detail-label">Armaduras</span><span>' + c.armor + '</span></div>' +
         '<div class="enc-detail-row"><span class="enc-detail-label">Armas</span><span>' + c.weapons + '</span></div>' +
-        '<div class="enc-class-section">Rasgos de clase</div>' +
-        '<div class="enc-tags">' + c.features.map(function(f) { return '<span class="enc-tag">' + f + '</span>'; }).join('') + '</div>' +
-        '<div class="enc-class-section">Subclases</div>' +
-        '<div class="enc-tags">' + c.subclasses.map(function(s) { return '<span class="enc-tag enc-tag-accent">' + s + '</span>'; }).join('') + '</div>' +
+        '<div class="enc-class-section">Rasgos de clase — toca para ver detalle</div>' +
+        '<div class="enc-tags-wrap">' + featuresHTML + '</div>' +
+        '<div class="enc-class-section">Subclases — toca para ver detalle</div>' +
+        '<div class="enc-tags-wrap">' + subHTML + '</div>' +
       '</div>';
     }).join('');
 }
@@ -1560,6 +1599,32 @@ function renderEncRaces(container) {
   var races = ENCYCLOPEDIA_DATA.races;
   container.innerHTML = '<div class="enc-section-title">Razas Jugables</div>' +
     races.map(function(r) {
+      var traitsHTML = '';
+      if (typeof r.traits === 'object' && !Array.isArray(r.traits)) {
+        traitsHTML = Object.keys(r.traits).map(function(tname) {
+          var key = r.name + ':trait:' + tname;
+          var expanded = encExpandedFeature === key;
+          return '<div class="enc-tag enc-tag-clickable" onclick="event.stopPropagation();toggleEncFeature(\'' + key.replace(/'/g,"\\'") + '\')">' + tname + (expanded ? ' ▾' : ' ▸') + '</div>' +
+            (expanded ? '<div class="enc-feature-desc">' + r.traits[tname] + '</div>' : '');
+        }).join('');
+      } else if (Array.isArray(r.traits)) {
+        traitsHTML = r.traits.map(function(t) { return '<span class="enc-tag">' + t + '</span>'; }).join('');
+      }
+
+      var subHTML = '';
+      if (typeof r.subraces === 'object' && !Array.isArray(r.subraces)) {
+        var keys = Object.keys(r.subraces);
+        if (keys.length > 0) {
+          subHTML = '<div class="enc-class-section">Subrazas — toca para ver detalle</div><div class="enc-tags-wrap">' +
+            keys.map(function(sname) {
+              var key = r.name + ':subrace:' + sname;
+              var expanded = encExpandedFeature === key;
+              return '<div class="enc-tag enc-tag-accent enc-tag-clickable" onclick="event.stopPropagation();toggleEncFeature(\'' + key.replace(/'/g,"\\'") + '\')">' + sname + (expanded ? ' ▾' : ' ▸') + '</div>' +
+                (expanded ? '<div class="enc-feature-desc enc-feature-accent">' + r.subraces[sname] + '</div>' : '');
+            }).join('') + '</div>';
+        }
+      }
+
       return '<div class="enc-class-card">' +
         '<div class="enc-class-header">' +
           '<div class="enc-class-name">' + r.name + '</div>' +
@@ -1567,12 +1632,9 @@ function renderEncRaces(container) {
         '</div>' +
         '<div class="enc-detail-row"><span class="enc-detail-label">Velocidad</span><span>' + r.speed + '</span></div>' +
         '<div class="enc-detail-row"><span class="enc-detail-label">Tamaño</span><span>' + r.size + '</span></div>' +
-        '<div class="enc-class-section">Rasgos raciales</div>' +
-        '<div class="enc-tags">' + r.traits.map(function(t) { return '<span class="enc-tag">' + t + '</span>'; }).join('') + '</div>' +
-        (r.subraces.length > 0 ?
-          '<div class="enc-class-section">Subrazas</div>' +
-          '<div class="enc-tags">' + r.subraces.map(function(s) { return '<span class="enc-tag enc-tag-accent">' + s + '</span>'; }).join('') + '</div>'
-          : '') +
+        '<div class="enc-class-section">Rasgos raciales — toca para ver detalle</div>' +
+        '<div class="enc-tags-wrap">' + traitsHTML + '</div>' +
+        subHTML +
       '</div>';
     }).join('');
 }
