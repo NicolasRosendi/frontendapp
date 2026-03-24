@@ -296,12 +296,26 @@
   <div class="card">
     <div class="identity-grid">
       <div class="id-field full"><span class="id-label">Nombre del personaje</span><span class="id-value" data-field="charName">—</span></div>
-      <div class="id-field"><span class="id-label">Clase y Nivel</span><span class="id-value" data-field="class">—</span></div>
+      <div class="id-field">
+        <span class="id-label">Clase</span>
+        <span class="id-value" id="classField" data-field="class">—</span>
+      </div>
+      <div class="id-field">
+        <span class="id-label">Nivel</span>
+        <span class="id-value" id="levelField" data-field="level">1</span>
+      </div>
+      <div class="id-field">
+        <span class="id-label">Raza</span>
+        <span class="id-value" id="raceField" data-field="race">—</span>
+      </div>
       <div class="id-field"><span class="id-label">Transfondo</span><span class="id-value" data-field="background">—</span></div>
-      <div class="id-field"><span class="id-label">Raza</span><span class="id-value" data-field="race">—</span></div>
       <div class="id-field"><span class="id-label">Alineamiento</span><span class="id-value" data-field="alignment">—</span></div>
       <div class="id-field"><span class="id-label">Jugador</span><span class="id-value" data-field="player">—</span></div>
       <div class="id-field"><span class="id-label">Experiencia</span><span class="id-value" data-field="xp">—</span></div>
+    </div>
+    <!-- Conjuros disponibles link -->
+    <div id="spellsAvailableLink" style="display:none;margin-top:8px;">
+      <button class="add-btn" onclick="goToClassSpells()" style="text-align:center;">✦ Ver conjuros disponibles para mi clase</button>
     </div>
   </div>
   <div class="card">
