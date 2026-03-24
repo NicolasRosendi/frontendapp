@@ -249,7 +249,7 @@ function loadStateFromData(d, name) {
   state.spells = ensureSpells(d.spells);
   // Text fields
   textFields = {};
-  const tf = ['charName','class','background','race','alignment','player','xp','proficiencies','personality','ideals','bonds','flaws','traits','age','height','weight','eyes','skin','hair','appearance','backstory','allies','treasure','additionalTraits','ac','initiative','speed','hitDice','hdTotal','armorCA','armorName','coinPP','coinPO','coinPE','coinPPT','coinPC','spellAbility'];
+  const tf = ['charName','class','level','race','subrace','background','alignment','player','xp','proficiencies','personality','ideals','bonds','flaws','traits','age','height','weight','eyes','skin','hair','appearance','backstory','allies','treasure','additionalTraits','ac','initiative','speed','hitDice','hdTotal','armorCA','armorName','coinPP','coinPO','coinPE','coinPPT','coinPC','spellAbility'];
   tf.forEach(k => { if (d[k] !== undefined) textFields[k] = String(d[k]); });
   if (name && !textFields.charName) textFields.charName = name;
 }
@@ -1770,7 +1770,49 @@ function onLevelChanged(level) {
 }
 
 function onRaceChanged(raceName) {
-  // Could auto-apply racial stat bonuses in the future
+  var container = document.getElementById('subraceFieldContainer');
+  var subraceEl = document.getElementById('subraceField');
+  if (!container || !subraceEl) return;
+
+  // Find race in encyclopedia data
+  var raceData = null;
+  if (ENCYCLOPEDIA_DATA && ENCYCLOPEDIA_DATA.races) {
+    raceData = ENCYCLOPEDIA_DATA.races.find(function(r) { return r.name === raceName; });
+  }
+
+  var subraces = [];
+  if (raceData && typeof raceData.subraces === 'object' && !Array.isArray(raceData.subraces)) {
+    subraces = Object.keys(raceData.subraces);
+  }
+
+  if (subraces.length > 0 && state.editMode) {
+    container.style.display = 'block';
+    var currentSub = textFields['subrace'] || '';
+    var sel = document.createElement('select');
+    sel.className = 'ei sm';
+    sel.style.cssText = 'width:100%;background:var(--surface-dim);border:none;border-bottom:1px solid var(--primary-dim);color:var(--on-surface);font-family:Cinzel,serif;font-size:13px;padding:4px;outline:none;';
+    var opt0 = document.createElement('option');
+    opt0.value = ''; opt0.textContent = '— Elegir subraza —';
+    sel.appendChild(opt0);
+    subraces.forEach(function(sn) {
+      var opt = document.createElement('option');
+      opt.value = sn; opt.textContent = sn;
+      if (sn === currentSub) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', function() {
+      textFields['subrace'] = sel.value;
+      showToast('Subraza: ' + sel.value);
+    });
+    subraceEl.innerHTML = '';
+    subraceEl.appendChild(sel);
+  } else if (subraces.length > 0 && textFields['subrace']) {
+    container.style.display = 'block';
+    subraceEl.textContent = textFields['subrace'];
+  } else {
+    container.style.display = 'none';
+  }
+
   showToast('Raza: ' + raceName);
 }
 
@@ -1923,12 +1965,50 @@ function renderClassFullViewHTML(className) {
     html += '</div>';
   }
 
-  // If caster, show available spell count hint
-  if (cls && cls.spellcaster) {
+  // If caster, show spell slot table
+  if (cls && cls.spellcaster && cls.spell_slots) {
     html += '<div class="enc-class-card">';
-    html += '<div class="card-title">Lanzador de Conjuros</div>';
-    html += '<div style="font-family:Crimson Text,serif;font-size:14px;color:var(--on-surface-dim);line-height:1.6;">Esta clase puede lanzar conjuros. Consultá la sección de Conjuros en la enciclopedia para ver los conjuros disponibles para ' + className + '.</div>';
-    html += '<button class="add-btn" onclick="setEncCategory(\'spells\');setEncSpellClass(\'' + className + '\');" style="margin-top:8px;text-align:center;">✦ Ver conjuros de ' + className + '</button>';
+    html += '<div class="card-title">Espacios de Conjuro por Nivel</div>';
+    html += '<div style="font-family:Crimson Text,serif;font-size:13px;color:var(--on-surface-dim);margin-bottom:8px;line-height:1.5;">Los espacios de conjuro son "cargas" que gastás para lanzar conjuros. Se recuperan tras un descanso prolongado' + (cls.caster_type === 'warlock' ? ' (corto para brujos)' : '') + '. Los trucos se lanzan ilimitadamente.</div>';
+
+    if (cls.caster_type === 'warlock') {
+      // Warlock: simpler table
+      html += '<div style="overflow-x:auto;">';
+      html += '<table style="width:100%;border-collapse:collapse;font-family:Manrope,sans-serif;font-size:11px;">';
+      html += '<tr style="border-bottom:1px solid var(--outline-variant);"><th style="padding:6px 4px;text-align:left;color:var(--primary);font-size:10px;">NV</th><th style="padding:6px 4px;color:var(--on-surface-muted);">Trucos</th><th style="padding:6px 4px;color:var(--on-surface-muted);">Espacios</th><th style="padding:6px 4px;color:var(--on-surface-muted);">Nv. Espacio</th></tr>';
+      for (var wlvl = 1; wlvl <= 20; wlvl++) {
+        var ws = cls.spell_slots[wlvl];
+        var wcantrips = cls.cantrips_by_level ? (cls.cantrips_by_level[wlvl] || 0) : 0;
+        html += '<tr style="border-bottom:1px solid rgba(77,70,55,0.15);"><td style="padding:4px;font-weight:700;color:var(--primary);">' + wlvl + '</td><td style="padding:4px;text-align:center;">' + wcantrips + '</td><td style="padding:4px;text-align:center;color:var(--tertiary);">' + ws.slots + '</td><td style="padding:4px;text-align:center;">' + ws.level + 'º</td></tr>';
+      }
+      html += '</table></div>';
+    } else {
+      // Full/half caster table
+      var maxSpellLvl = cls.caster_type === 'half' ? 5 : 9;
+      html += '<div style="overflow-x:auto;">';
+      html += '<table style="width:100%;border-collapse:collapse;font-family:Manrope,sans-serif;font-size:10px;">';
+      html += '<tr style="border-bottom:1px solid var(--outline-variant);"><th style="padding:4px 2px;text-align:left;color:var(--primary);font-size:9px;">NV</th>';
+      if (cls.cantrips_by_level) html += '<th style="padding:4px 2px;color:var(--on-surface-muted);font-size:9px;">T</th>';
+      for (var si = 1; si <= maxSpellLvl; si++) html += '<th style="padding:4px 2px;color:var(--on-surface-muted);font-size:9px;">' + si + 'º</th>';
+      html += '</tr>';
+      for (var slvl = 1; slvl <= 20; slvl++) {
+        var slots = cls.spell_slots[slvl];
+        if (!slots) continue;
+        html += '<tr style="border-bottom:1px solid rgba(77,70,55,0.1);"><td style="padding:3px 2px;font-weight:700;color:var(--primary);">' + slvl + '</td>';
+        if (cls.cantrips_by_level) {
+          var ct = cls.cantrips_by_level[String(slvl)] || 0;
+          html += '<td style="padding:3px 2px;text-align:center;color:var(--tertiary);">' + ct + '</td>';
+        }
+        for (var ssi = 0; ssi < maxSpellLvl; ssi++) {
+          var sv = slots[ssi] || 0;
+          html += '<td style="padding:3px 2px;text-align:center;' + (sv > 0 ? 'color:var(--on-surface);' : 'color:var(--outline-variant);') + '">' + (sv > 0 ? sv : '—') + '</td>';
+        }
+        html += '</tr>';
+      }
+      html += '</table></div>';
+    }
+
+    html += '<button class="add-btn" onclick="setEncCategory(\'spells\');setEncSpellClass(\'' + className + '\');" style="margin-top:10px;text-align:center;">✦ Ver conjuros disponibles para ' + className + '</button>';
     html += '</div>';
   }
 
