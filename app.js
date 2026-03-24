@@ -1520,13 +1520,16 @@ function renderEncSpells(container, countEl) {
     html += '<div class="enc-spell-icon" style="color:' + color + ';">' + icon + '</div>';
     html += '<div class="enc-spell-info">';
     html += '<div class="enc-spell-name">' + s.name + '</div>';
-    html += '<div class="enc-spell-meta">' + s.school + ' · ' + levelText + (s.ritual ? ' · Ritual' : '') + '</div>';
+    html += '<div class="enc-spell-meta">' + s.school + ' · ' + levelText + (s.ritual ? ' · <span style="color:var(--tertiary);font-weight:600;">Ritual</span>' : '') + '</div>';
     html += '</div>';
     html += '<div class="enc-spell-level" style="color:' + color + ';">' + (s.level === 0 ? '⊙' : s.level) + '</div>';
     html += '</div>';
 
     if (isExpanded) {
       html += '<div class="enc-spell-details">';
+      if (s.ritual) {
+        html += '<div style="display:inline-block;font-family:Manrope,sans-serif;font-size:10px;font-weight:600;color:var(--tertiary);background:rgba(76,42,140,0.15);padding:3px 10px;margin-bottom:8px;letter-spacing:1px;">✦ RITUAL — Se puede lanzar sin gastar espacio de conjuro (+10 min)</div>';
+      }
       html += '<div class="enc-detail-row"><span class="enc-detail-label">Tiempo</span><span>' + (s.casting_time || '—') + '</span></div>';
       html += '<div class="enc-detail-row"><span class="enc-detail-label">Alcance</span><span>' + (s.range || '—') + '</span></div>';
       html += '<div class="enc-detail-row"><span class="enc-detail-label">Componentes</span><span>' + (s.components || '—') + '</span></div>';
