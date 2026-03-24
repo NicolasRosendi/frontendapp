@@ -361,9 +361,9 @@ body::after {
 .table-card-actions { display: flex; gap: 8px; }
 
 /* Join / Create */
-.join-row { display: flex; gap: 8px; margin-bottom: 14px; }
+.join-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .join-input {
-  flex: 1; background: var(--surface-container-low);
+  flex: 1; min-width: 0; background: var(--surface-container-low);
   border: none; border-bottom: 1px solid var(--outline-variant);
   color: var(--on-surface);
   font-family: 'Cinzel', serif;
@@ -373,9 +373,9 @@ body::after {
 }
 .join-input:focus { border-bottom-color: var(--tertiary); }
 .join-input::placeholder { color: var(--on-surface-muted); letter-spacing: 1px; text-transform: none; font-family: 'Manrope', sans-serif; font-size: 11px; }
-.create-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.create-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .create-input {
-  flex: 1; background: var(--surface-container-low);
+  flex: 1; min-width: 0; background: var(--surface-container-low);
   border: none; border-bottom: 1px solid var(--outline-variant);
   color: var(--on-surface);
   font-family: 'Crimson Text', serif;
@@ -1551,4 +1551,16 @@ textarea.ei { resize: vertical; min-height: 60px; }
   flex-wrap: wrap;
   gap: 4px;
   align-items: flex-start;
+}
+
+/* Mobile overflow fixes */
+.lobby-panel { overflow-x: hidden; }
+.card { overflow: hidden; }
+.enc-tags-wrap, .enc-tags { overflow-x: auto; }
+.char-action-btn { flex-shrink: 0; white-space: nowrap; }
+.table-card-actions { flex-wrap: wrap; }
+@media (max-width: 400px) {
+  .join-row, .create-row { flex-direction: column; }
+  .join-row .char-action-btn,
+  .create-row .char-action-btn { width: 100%; text-align: center; padding: 12px; }
 }
