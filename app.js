@@ -147,6 +147,7 @@ function enterLobby() {
   document.getElementById('lobbyUser').textContent = currentUser.username;
   loadCharacters();
   loadTables();
+  loadPublicTables();
 }
 
 function switchLobbyTab(name, btn) {
@@ -154,7 +155,7 @@ function switchLobbyTab(name, btn) {
   document.querySelectorAll('.lobby-nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('lobby-' + name).classList.add('active');
   btn.classList.add('active');
-  if (name === 'tables') loadTables();
+  if (name === 'tables') { loadTables(); loadPublicTables(); }
 }
 
 // ── Characters ────────────────────────
@@ -297,14 +298,109 @@ async function loadTables() {
   } catch (err) { container.innerHTML = '<div style="color:var(--red2);padding:12px;">Error: ' + err.message + '</div>'; }
 }
 
+let newTableVisibility = 'public';
+
+function setTableVisibility(vis) {
+  newTableVisibility = vis;
+  const pubBtn = document.getElementById('visPublicBtn');
+  const privBtn = document.getElementById('visPrivateBtn');
+  const pwdRow = document.getElementById('tablePasswordRow');
+  if (vis === 'public') {
+    pubBtn.className = 'adv-btn adv-active';
+    privBtn.className = 'adv-btn';
+    pwdRow.style.display = 'none';
+  } else {
+    pubBtn.className = 'adv-btn';
+    privBtn.className = 'adv-btn dis-active';
+    pwdRow.style.display = 'block';
+  }
+}
+
 async function createTable() {
   const name = document.getElementById('newTableName').value.trim();
   if (!name) { showToast('Ponele un nombre a la mesa', true); return; }
   try {
-    const data = await api('/tables', { method: 'POST', body: JSON.stringify({ name }) });
-    showToast('Mesa creada! Código: ' + data.table.code);
+    const chars = await api('/characters');
+    if (chars.characters.length === 0) {
+      showToast('Creá una ficha primero antes de crear una mesa', true);
+      return;
+    }
+    let charId;
+    if (chars.characters.length === 1) {
+      charId = chars.characters[0].id;
+    } else {
+      const names = chars.characters.map((c,i) => (i+1) + '. ' + c.name).join('\n');
+      const choice = prompt('¿Con qué personaje te unís a la mesa?\n' + names + '\n\nIngresá el número:');
+      const idx = parseInt(choice) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= chars.characters.length) { showToast('Selección inválida', true); return; }
+      charId = chars.characters[idx].id;
+    }
+    const password = (document.getElementById('newTablePassword') || {}).value || null;
+    const data = await api('/tables', {
+      method: 'POST',
+      body: JSON.stringify({ name, visibility: newTableVisibility, password: newTableVisibility === 'private' ? password : null })
+    });
+    await api('/tables/' + data.table.id + '/join', { method: 'POST', body: JSON.stringify({ character_id: charId }) });
+    showToast('Mesa creada y te uniste! Código: ' + data.table.code);
     document.getElementById('newTableName').value = '';
+    if (document.getElementById('newTablePassword')) document.getElementById('newTablePassword').value = '';
     loadTables();
+    loadPublicTables();
+  } catch (err) { showToast(err.message, true); }
+}
+
+async function loadPublicTables() {
+  const container = document.getElementById('publicTableListContainer');
+  if (!container) return;
+  container.innerHTML = '<div class="spinner"></div>';
+  try {
+    const data = await api('/tables/public');
+    if (data.tables.length === 0) {
+      container.innerHTML = '<div style="text-align:center;color:var(--on-surface-muted);padding:20px;font-style:italic;">No hay mesas públicas.</div>';
+      return;
+    }
+    container.innerHTML = data.tables.map(function(t) {
+      const joined = t.already_joined;
+      return '<div class="table-card">' +
+        '<div class="table-card-header">' +
+          '<div class="table-card-name">' + t.name + '</div>' +
+          '<div class="table-card-code">' + t.code + '</div>' +
+        '</div>' +
+        '<div class="table-card-info">' + t.player_count + ' jugador(es) · Creada por ' + t.owner_name + ' · ' + (t.status === 'combat' ? '⚔ En combate' : 'Lobby') + '</div>' +
+        '<div class="table-card-actions">' +
+          (joined
+            ? '<button class="char-action-btn" onclick="openTable(' + t.id + ')">Entrar</button>'
+            : '<button class="char-action-btn" onclick="joinPublicTable(' + t.id + ',\'' + t.name + '\')">Unirse</button>'
+          ) +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    container.innerHTML = '<div style="color:var(--red-bright);padding:12px;">Error: ' + err.message + '</div>';
+  }
+}
+
+async function joinPublicTable(tableId, tableName) {
+  try {
+    const chars = await api('/characters');
+    if (chars.characters.length === 0) {
+      showToast('Creá una ficha primero', true);
+      return;
+    }
+    let charId;
+    if (chars.characters.length === 1) {
+      charId = chars.characters[0].id;
+    } else {
+      const names = chars.characters.map(function(c,i) { return (i+1) + '. ' + c.name; }).join('\n');
+      const choice = prompt('¿Con qué personaje te unís?\n' + names + '\n\nIngresá el número:');
+      const idx = parseInt(choice) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= chars.characters.length) { showToast('Selección inválida', true); return; }
+      charId = chars.characters[idx].id;
+    }
+    await api('/tables/' + tableId + '/join', { method: 'POST', body: JSON.stringify({ character_id: charId }) });
+    showToast('Te uniste a ' + tableName);
+    loadTables();
+    loadPublicTables();
   } catch (err) { showToast(err.message, true); }
 }
 
@@ -312,15 +408,18 @@ async function joinTableByCode() {
   const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
   if (!code || code.length < 4) { showToast('Ingresá el código de la mesa', true); return; }
   try {
-    // Find table
     const found = await api('/tables/join/' + code);
-    // Need to select a character
+    // Si es privada con password, pedirla
+    let password = null;
+    if (found.table.visibility === 'private' && found.table.password) {
+      password = prompt('Esta mesa es privada. Ingresá la contraseña:');
+      if (password === null) return;
+    }
     const chars = await api('/characters');
     if (chars.characters.length === 0) {
       showToast('Creá una ficha primero', true);
       return;
     }
-    // Use first character or prompt
     let charId;
     if (chars.characters.length === 1) {
       charId = chars.characters[0].id;
@@ -331,10 +430,11 @@ async function joinTableByCode() {
       if (isNaN(idx) || idx < 0 || idx >= chars.characters.length) { showToast('Selección inválida', true); return; }
       charId = chars.characters[idx].id;
     }
-    await api('/tables/' + found.table.id + '/join', { method: 'POST', body: JSON.stringify({ character_id: charId }) });
+    await api('/tables/' + found.table.id + '/join', { method: 'POST', body: JSON.stringify({ character_id: charId, password: password }) });
     showToast('Te uniste a ' + found.table.name);
     document.getElementById('joinCodeInput').value = '';
     loadTables();
+    loadPublicTables();
   } catch (err) { showToast(err.message, true); }
 }
 
@@ -713,10 +813,10 @@ function renderEditableFields(){
 }
 
 function renderAll(){
-  renderStats(); renderSaves(); renderSkills(); renderAttacks(); renderInventory(); renderSpells(); renderHP(); renderEditableFields(); renderSpellMeta();
+  renderStats(); renderSaves(); renderSkills(); renderAttacks(); renderInventory(); renderSpells(); renderHP(); renderEditableFields(); renderSpellMeta(); renderDiceGrid();
   const profEl=document.getElementById('profBonusDisp');
   if(state.editMode){
-    profEl.innerHTML=`<input type="number" min="1" max="10" value="${state.profBonus}" onchange="state.profBonus=Math.max(1,Math.min(10,+this.value));renderAll();" style="width:42px;text-align:center;background:#0a0805;border:1px solid var(--gold);border-radius:4px;color:var(--gold2);font-family:Cinzel,serif;font-size:18px;padding:2px;outline:none;">`;
+    profEl.innerHTML=`<input type="number" min="1" max="10" value="${state.profBonus}" onchange="state.profBonus=Math.max(1,Math.min(10,+this.value));renderAll();" style="width:42px;text-align:center;background:var(--surface-dim);border:none;border-bottom:1px solid var(--primary-dim);color:var(--primary);font-family:Cinzel,serif;font-size:18px;padding:2px;outline:none;">`;
   }else{
     profEl.textContent=fmt(state.profBonus);
   }
@@ -853,3 +953,55 @@ function clearHistory(){ diceState.history=[]; renderHistory(); }
     showScreen('auth');
   }
 })();
+
+// ══════════════════════════════════════
+//  COMBAT DICE (manual rolls in combat)
+// ══════════════════════════════════════
+let combatDiceSelected = null;
+
+function renderCombatDiceGrid(){
+  const grid = document.getElementById('combatDiceGrid');
+  if(!grid) return;
+  grid.innerHTML = '';
+  DICE.forEach(function(d){
+    const sel = combatDiceSelected === d;
+    const btn = document.createElement('button');
+    btn.className = 'die-btn' + (sel ? ' selected' : '');
+    btn.innerHTML = '<div class="die-selected-badge"></div><div class="die-icon">' + dieSVG(d,sel) + '</div><div class="die-label">d' + d + '</div>';
+    btn.addEventListener('click', function(){
+      combatDiceSelected = combatDiceSelected === d ? null : d;
+      renderCombatDiceGrid();
+    });
+    grid.appendChild(btn);
+  });
+  const rollBtn = document.getElementById('combatRollBtn');
+  if(rollBtn) rollBtn.disabled = combatDiceSelected === null;
+}
+
+function rollCombatDice(){
+  const faces = combatDiceSelected;
+  if(!faces) return;
+  const modRaw = parseInt(document.getElementById('combatDiceMod').value) || 0;
+  const roll = Math.floor(Math.random() * faces) + 1;
+  const total = roll + modRaw;
+  const isCrit = roll === faces;
+  const isFumble = roll === 1;
+  const modStr = modRaw !== 0 ? (modRaw > 0 ? ' + ' + modRaw : ' − ' + Math.abs(modRaw)) : '';
+
+  const area = document.getElementById('combatDiceResult');
+  if(!area) return;
+  area.innerHTML =
+    '<div class="result-formula">1d' + faces + modStr + '</div>' +
+    '<div class="result-dice-row"><div class="result-die-chip ' + (isCrit?'max':'') + (isFumble?'min':'') + '">' + roll + '</div></div>' +
+    (modRaw !== 0 ? '<div class="result-breakdown">' + roll + (modRaw >= 0 ? ' + ' : ' − ') + Math.abs(modRaw) + '</div>' : '') +
+    '<div class="result-total' + (isCrit?' critical':'') + (isFumble?' fumble':'') + '" style="font-size:36px;">' + total + '</div>' +
+    (isCrit ? '<div style="color:var(--primary);font-size:11px;margin-top:4px;font-family:Cinzel,serif;letter-spacing:3px;">✦ CRÍTICO ✦</div>' : '') +
+    (isFumble ? '<div style="color:var(--red-bright,#d94f4f);font-size:11px;margin-top:4px;font-family:Cinzel,serif;letter-spacing:3px;">✖ PIFIA ✖</div>' : '');
+}
+
+// Render combat dice when entering combat view
+var _origEnterCombat = enterCombatView;
+enterCombatView = function(data) {
+  _origEnterCombat(data);
+  renderCombatDiceGrid();
+};
