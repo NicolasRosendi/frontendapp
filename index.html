@@ -57,22 +57,36 @@
   </div>
   <div class="lobby-panel" id="lobby-tables">
     <div class="card">
-      <div class="card-title">Unirse a una Mesa</div>
+      <div class="card-title">Unirse a una Mesa Privada</div>
       <div class="join-row">
         <input class="join-input" id="joinCodeInput" placeholder="Código de 6 letras" maxlength="6">
         <button class="char-action-btn" onclick="joinTableByCode()" style="padding:12px 0;font-size:11px;">Unirse</button>
+      </div>
+      <div class="join-row" id="joinPasswordRow" style="display:none;">
+        <input class="create-input" id="joinPasswordInput" type="password" placeholder="Contraseña de la mesa...">
       </div>
     </div>
     <div class="card">
       <div class="card-title">Crear Mesa Nueva</div>
       <div class="create-row">
-        <input class="create-input" id="newTableName" placeholder="Nombre de la mesa...">
+        <input class="create-input" id="newTableName" placeholder="Nombre de la mesa..." style="flex:2;">
         <button class="char-action-btn" onclick="createTable()" style="padding:12px 0;font-size:11px;">Crear</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+        <span style="font-family:Manrope,sans-serif;font-size:10px;color:var(--on-surface-muted);text-transform:uppercase;letter-spacing:1px;">Tipo:</span>
+        <button class="adv-btn adv-active" id="visPublicBtn" onclick="setTableVisibility('public')" style="flex:1;">Pública</button>
+        <button class="adv-btn" id="visPrivateBtn" onclick="setTableVisibility('private')" style="flex:1;">Privada</button>
+      </div>
+      <div id="tablePasswordRow" style="display:none;margin-top:8px;">
+        <input class="create-input" id="newTablePassword" type="password" placeholder="Contraseña (opcional)..." style="width:100%;">
       </div>
     </div>
     <div class="section-divider"></div>
     <div class="card-title" style="padding:0 0 10px;">Mis Mesas</div>
     <div id="tableListContainer"><div class="spinner"></div></div>
+    <div class="section-divider"></div>
+    <div class="card-title" style="padding:0 0 10px;">Mesas Públicas</div>
+    <div id="publicTableListContainer"><div class="spinner"></div></div>
   </div>
 </div>
 
@@ -105,6 +119,21 @@
     </div>
     <div class="combat-waiting" id="combatWaiting" style="display:none;">Esperando turno del oponente...</div>
     <div class="attack-result-splash" id="attackSplash"></div>
+
+    <!-- Dados manuales en combate -->
+    <div class="section-label" style="margin-top:18px;">Dados Manuales</div>
+    <div class="card" id="combatDiceArea">
+      <div class="dice-grid" id="combatDiceGrid"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+        <span class="dice-control-label" style="min-width:auto;">Mod</span>
+        <input class="mod-input" id="combatDiceMod" type="number" placeholder="0" value="0" style="max-width:70px;">
+        <button class="roll-btn" id="combatRollBtn" onclick="rollCombatDice()" disabled style="flex:1;margin-bottom:0;padding:10px;">🎲 Tirar</button>
+      </div>
+      <div class="dice-result-area" id="combatDiceResult" style="min-height:60px;">
+        <div class="result-empty" style="padding:12px 0;">Seleccioná un dado</div>
+      </div>
+    </div>
+
     <div class="section-label" style="margin-top:18px;">Log de Combate</div>
     <div class="combat-log" id="combatLog"></div>
   </div>
