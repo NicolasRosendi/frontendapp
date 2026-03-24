@@ -1648,3 +1648,308 @@ function renderEncRules(container, rules, title) {
       '</div>';
     }).join('');
 }
+
+// ══════════════════════════════════════
+//  FICHA ↔ ENCYCLOPEDIA INTEGRATION
+// ══════════════════════════════════════
+
+// Class/Race/Level selectors in edit mode
+function renderClassRaceSelectors() {
+  if (!state.editMode) {
+    // Update spells link visibility
+    var link = document.getElementById('spellsAvailableLink');
+    var cls = textFields['class'] || '';
+    var casterClasses = ['Bardo','Brujo','Clérigo','Druida','Explorador','Hechicero','Mago','Paladín'];
+    if (link) link.style.display = casterClasses.indexOf(cls) !== -1 ? 'block' : 'none';
+    return;
+  }
+
+  var classEl = document.getElementById('classField');
+  var levelEl = document.getElementById('levelField');
+  var raceEl = document.getElementById('raceField');
+
+  if (classEl && classEl.tagName !== 'SELECT') {
+    var currentClass = textFields['class'] || '';
+    var classNames = ['—','Bárbaro','Bardo','Brujo','Clérigo','Druida','Explorador','Guerrero','Hechicero','Mago','Monje','Paladín','Pícaro'];
+    var sel = document.createElement('select');
+    sel.className = 'ei sm';
+    sel.style.cssText = 'width:100%;background:var(--surface-dim);border:none;border-bottom:1px solid var(--primary-dim);color:var(--on-surface);font-family:Cinzel,serif;font-size:13px;padding:4px;outline:none;';
+    classNames.forEach(function(cn) {
+      var opt = document.createElement('option');
+      opt.value = cn === '—' ? '' : cn;
+      opt.textContent = cn;
+      if (cn === currentClass || (cn === '—' && !currentClass)) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', function() {
+      textFields['class'] = sel.value;
+      onClassChanged(sel.value);
+    });
+    classEl.innerHTML = '';
+    classEl.appendChild(sel);
+  }
+
+  if (levelEl && levelEl.tagName !== 'INPUT') {
+    var currentLevel = parseInt(textFields['level']) || 1;
+    var inp = document.createElement('input');
+    inp.type = 'number';
+    inp.min = 1;
+    inp.max = 20;
+    inp.value = currentLevel;
+    inp.className = 'ei sm';
+    inp.style.cssText = 'width:60px;text-align:center;background:var(--surface-dim);border:none;border-bottom:1px solid var(--primary-dim);color:var(--on-surface);font-family:Cinzel,serif;font-size:13px;padding:4px;outline:none;';
+    inp.addEventListener('change', function() {
+      var v = Math.max(1, Math.min(20, parseInt(inp.value) || 1));
+      inp.value = v;
+      textFields['level'] = String(v);
+      onLevelChanged(v);
+    });
+    levelEl.innerHTML = '';
+    levelEl.appendChild(inp);
+  }
+
+  if (raceEl && raceEl.tagName !== 'SELECT') {
+    var currentRace = textFields['race'] || '';
+    var raceNames = ['—','Enano','Elfo','Mediano','Humano','Dracónido','Gnomo','Semielfo','Semiorco','Tiefling'];
+    var sel2 = document.createElement('select');
+    sel2.className = 'ei sm';
+    sel2.style.cssText = 'width:100%;background:var(--surface-dim);border:none;border-bottom:1px solid var(--primary-dim);color:var(--on-surface);font-family:Cinzel,serif;font-size:13px;padding:4px;outline:none;';
+    raceNames.forEach(function(rn) {
+      var opt = document.createElement('option');
+      opt.value = rn === '—' ? '' : rn;
+      opt.textContent = rn;
+      if (rn === currentRace || (rn === '—' && !currentRace)) opt.selected = true;
+      sel2.appendChild(opt);
+    });
+    sel2.addEventListener('change', function() {
+      textFields['race'] = sel2.value;
+      onRaceChanged(sel2.value);
+    });
+    raceEl.innerHTML = '';
+    raceEl.appendChild(sel2);
+  }
+
+  // Spells link
+  var link = document.getElementById('spellsAvailableLink');
+  if (link) link.style.display = 'none'; // hide in edit mode
+}
+
+function onClassChanged(className) {
+  if (!className || typeof CLASS_PROGRESSION === 'undefined') return;
+  var cls = CLASS_PROGRESSION.find(function(c) { return c.name === className; });
+  if (!cls) return;
+
+  // Auto-set proficiency bonus based on level
+  var level = parseInt(textFields['level']) || 1;
+  var profByLevel = {1:2,2:2,3:2,4:2,5:3,6:3,7:3,8:3,9:4,10:4,11:4,12:4,13:5,14:5,15:5,16:5,17:6,18:6,19:6,20:6};
+  state.profBonus = profByLevel[level] || 2;
+
+  // Auto-set saving throw proficiencies
+  if (cls.saves) {
+    state.savingThrowProf = cls.saves.slice();
+  }
+
+  // Set spell ability key
+  var spellKeyMap = {'Bardo':'cha','Brujo':'cha','Clérigo':'wis','Druida':'wis','Explorador':'wis','Hechicero':'cha','Mago':'int','Paladín':'cha'};
+  if (spellKeyMap[className]) {
+    state.spellAbilityKey = spellKeyMap[className];
+    textFields['spellAbility'] = spellKeyMap[className].toUpperCase();
+  }
+
+  renderAll();
+  showToast('Clase: ' + className + ' · Salvaciones y competencia actualizados');
+}
+
+function onLevelChanged(level) {
+  var profByLevel = {1:2,2:2,3:2,4:2,5:3,6:3,7:3,8:3,9:4,10:4,11:4,12:4,13:5,14:5,15:5,16:5,17:6,18:6,19:6,20:6};
+  state.profBonus = profByLevel[level] || 2;
+  renderAll();
+}
+
+function onRaceChanged(raceName) {
+  // Could auto-apply racial stat bonuses in the future
+  showToast('Raza: ' + raceName);
+}
+
+function goToClassSpells() {
+  var cls = textFields['class'] || '';
+  if (!cls) { showToast('Elegí una clase primero', true); return; }
+  // Go to lobby > encyclopedia > spells filtered by class
+  backToLobby();
+  setTimeout(function() {
+    // Switch to encyclopedia tab
+    var btn = document.querySelectorAll('.lobby-nav-btn')[2]; // 3rd tab = encyclopedia
+    if (btn) { switchLobbyTab('encyclopedia', btn); }
+    setTimeout(function() {
+      setEncCategory('spells');
+      setEncSpellClass(cls);
+    }, 100);
+  }, 200);
+}
+
+// Hook into renderAll to add selectors
+var _origRenderAll = renderAll;
+renderAll = function() {
+  _origRenderAll();
+  renderClassRaceSelectors();
+};
+
+// ══════════════════════════════════════
+//  CLASS FULL VIEW (expanded progression)
+// ══════════════════════════════════════
+var encClassFullView = null; // class name or null
+
+function openClassFullView(className) {
+  encClassFullView = className;
+  renderEncyclopedia();
+  // Scroll to top of results
+  var r = document.getElementById('encResults');
+  if (r) r.scrollIntoView({behavior:'smooth'});
+}
+
+function closeClassFullView() {
+  encClassFullView = null;
+  renderEncyclopedia();
+}
+
+function renderClassFullViewHTML(className) {
+  // Find class in both data sources
+  var cls = null;
+  if (typeof CLASS_PROGRESSION !== 'undefined') {
+    cls = CLASS_PROGRESSION.find(function(c) { return c.name === className; });
+  }
+  var encCls = null;
+  if (ENCYCLOPEDIA_DATA && ENCYCLOPEDIA_DATA.classes) {
+    encCls = ENCYCLOPEDIA_DATA.classes.find(function(c) { return c.name === className; });
+  }
+  if (!cls && !encCls) return '<div>Clase no encontrada</div>';
+
+  var html = '';
+  html += '<button class="add-btn" onclick="closeClassFullView()" style="margin-bottom:12px;text-align:center;">← Volver a la lista de clases</button>';
+
+  // Header
+  html += '<div class="enc-class-card" style="border-left-color:var(--primary);">';
+  html += '<div class="enc-class-header"><div class="enc-class-name" style="font-size:24px;">' + className + '</div>';
+  html += '<div class="enc-class-die" style="font-size:18px;">' + (cls ? cls.hit_die : (encCls ? encCls.hit_die : '')) + '</div></div>';
+
+  // Basic info
+  if (cls) {
+    html += '<div class="enc-detail-row"><span class="enc-detail-label">PG nivel 1</span><span>' + cls.hp_first + '</span></div>';
+    html += '<div class="enc-detail-row"><span class="enc-detail-label">PG niveles superiores</span><span>' + cls.hp_higher + '</span></div>';
+    html += '<div class="enc-detail-row"><span class="enc-detail-label">Característica principal</span><span>' + cls.primary + '</span></div>';
+    html += '<div class="enc-detail-row"><span class="enc-detail-label">Salvaciones</span><span>' + cls.saves.map(function(s){var n={str:'FUE',dex:'DES',con:'CON',int:'INT',wis:'SAB',cha:'CAR'};return n[s]||s;}).join(', ') + '</span></div>';
+    html += '<div class="enc-detail-row"><span class="enc-detail-label">Armaduras</span><span>' + cls.armor + '</span></div>';
+    html += '<div class="enc-detail-row"><span class="enc-detail-label">Armas</span><span>' + cls.weapons + '</span></div>';
+    if (cls.skills_from) {
+      html += '<div class="enc-detail-row"><span class="enc-detail-label">Habilidades (elegir ' + cls.skills_choose + ')</span><span>' + cls.skills_from.join(', ') + '</span></div>';
+    }
+  } else if (encCls) {
+    html += '<div class="enc-detail-row"><span class="enc-detail-label">Característica principal</span><span>' + encCls.primary + '</span></div>';
+    html += '<div class="enc-detail-row"><span class="enc-detail-label">Salvaciones</span><span>' + encCls.saves + '</span></div>';
+    html += '<div class="enc-detail-row"><span class="enc-detail-label">Armaduras</span><span>' + encCls.armor + '</span></div>';
+    html += '<div class="enc-detail-row"><span class="enc-detail-label">Armas</span><span>' + encCls.weapons + '</span></div>';
+  }
+  html += '</div>';
+
+  // Progression table
+  if (cls && cls.progression) {
+    html += '<div class="enc-class-card">';
+    html += '<div class="card-title">Progresión por Nivel</div>';
+    cls.progression.forEach(function(p) {
+      if (p.features.length === 0) return;
+      var featsHTML = p.features.map(function(f) {
+        // Check if we have detail for this feature
+        var detail = null;
+        if (cls.features_detail && cls.features_detail[f]) {
+          detail = cls.features_detail[f];
+        }
+        if (detail) {
+          var key = className + ':prog:' + f;
+          var expanded = encExpandedFeature === key;
+          return '<div class="enc-tag enc-tag-clickable" onclick="event.stopPropagation();toggleEncFeature(\'' + key.replace(/'/g,"\\'") + '\')">' + f + (expanded ? ' ▾' : ' ▸') + '</div>' +
+            (expanded ? '<div class="enc-feature-desc">' + detail + '</div>' : '');
+        }
+        return '<span class="enc-tag">' + f + '</span>';
+      }).join('');
+
+      html += '<div class="enc-level-row">';
+      html += '<div class="enc-level-num">' + p.level + '</div>';
+      html += '<div class="enc-level-prof">+' + p.prof_bonus + '</div>';
+      html += '<div class="enc-level-feats">' + featsHTML + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Subclasses detail
+  if (cls && cls.subclasses_detail) {
+    html += '<div class="enc-class-card">';
+    html += '<div class="card-title">Subclases</div>';
+    Object.keys(cls.subclasses_detail).forEach(function(subName) {
+      var sub = cls.subclasses_detail[subName];
+      var key = className + ':subfull:' + subName;
+      var expanded = encExpandedFeature === key;
+
+      html += '<div class="enc-tag enc-tag-accent enc-tag-clickable" style="font-size:13px;padding:8px 12px;margin-bottom:4px;" onclick="toggleEncFeature(\'' + key.replace(/'/g,"\\'") + '\')">' + subName + (expanded ? ' ▾' : ' ▸') + '</div>';
+
+      if (expanded) {
+        html += '<div class="enc-feature-desc enc-feature-accent" style="margin-bottom:12px;">';
+        if (sub.description) html += '<div style="margin-bottom:8px;font-style:italic;">' + sub.description + '</div>';
+        if (sub.features) {
+          var levels = Object.keys(sub.features).map(Number).sort(function(a,b){return a-b;});
+          levels.forEach(function(lvl) {
+            var feat = sub.features[lvl];
+            html += '<div style="margin-bottom:6px;"><span style="font-family:Cinzel,serif;font-weight:700;color:var(--primary);font-size:12px;">Nivel ' + lvl + ' — ' + feat.name + '</span><br>' + feat.desc + '</div>';
+          });
+        }
+        html += '</div>';
+      }
+    });
+    html += '</div>';
+  } else if (encCls && typeof encCls.subclasses === 'object' && !Array.isArray(encCls.subclasses)) {
+    html += '<div class="enc-class-card">';
+    html += '<div class="card-title">Subclases</div>';
+    Object.keys(encCls.subclasses).forEach(function(subName) {
+      var key = className + ':subfull:' + subName;
+      var expanded = encExpandedFeature === key;
+      html += '<div class="enc-tag enc-tag-accent enc-tag-clickable" style="font-size:13px;padding:8px 12px;margin-bottom:4px;" onclick="toggleEncFeature(\'' + key.replace(/'/g,"\\'") + '\')">' + subName + (expanded ? ' ▾' : ' ▸') + '</div>';
+      if (expanded) {
+        html += '<div class="enc-feature-desc enc-feature-accent">' + encCls.subclasses[subName] + '</div>';
+      }
+    });
+    html += '</div>';
+  }
+
+  // If caster, show available spell count hint
+  if (cls && cls.spellcaster) {
+    html += '<div class="enc-class-card">';
+    html += '<div class="card-title">Lanzador de Conjuros</div>';
+    html += '<div style="font-family:Crimson Text,serif;font-size:14px;color:var(--on-surface-dim);line-height:1.6;">Esta clase puede lanzar conjuros. Consultá la sección de Conjuros en la enciclopedia para ver los conjuros disponibles para ' + className + '.</div>';
+    html += '<button class="add-btn" onclick="setEncCategory(\'spells\');setEncSpellClass(\'' + className + '\');" style="margin-top:8px;text-align:center;">✦ Ver conjuros de ' + className + '</button>';
+    html += '</div>';
+  }
+
+  return html;
+}
+
+// Override renderEncClasses to support full view
+var _origRenderEncClasses = renderEncClasses;
+renderEncClasses = function(container) {
+  if (encClassFullView) {
+    container.innerHTML = renderClassFullViewHTML(encClassFullView);
+    return;
+  }
+  // Use the existing render but add click-to-expand on class names
+  _origRenderEncClasses(container);
+  // Add click handlers to class names
+  var names = container.querySelectorAll('.enc-class-name');
+  names.forEach(function(el) {
+    var name = el.textContent;
+    el.style.cursor = 'pointer';
+    el.title = 'Click para ver progresión completa';
+    el.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openClassFullView(name);
+    });
+  });
+};
