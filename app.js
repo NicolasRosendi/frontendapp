@@ -775,7 +775,7 @@ function renderSpellMeta(){
 function renderSpells(){
   const el=document.getElementById('spellLevels'); if(!el)return; el.innerHTML=''; renderSpellMeta();
   const lnames=['Trucos','Nivel 1','Nivel 2','Nivel 3','Nivel 4','Nivel 5','Nivel 6','Nivel 7','Nivel 8','Nivel 9'];
-  const inpStyle='flex:1;background:#0a0805;border:1px solid var(--accent);border-radius:4px;color:var(--text);font-family:"Crimson Text",serif;font-size:14px;padding:3px 6px;outline:none;';
+  const inpStyle='flex:1;background:var(--surface-dim,#0a0805);border:none;border-bottom:1px solid var(--tertiary-container,#4c2a8c);color:var(--on-surface,#e8e1dd);font-family:Crimson Text,serif;font-size:15px;padding:4px 6px;outline:none;';
   for(let lvl=0;lvl<=9;lvl++){
     const d=state.spells[lvl]; if(!d) continue;
     if(!d.prep) d.prep=d.list.map(()=>false);
@@ -783,9 +783,10 @@ function renderSpells(){
     let slots='';
     if(lvl>0&&d.slots>0){ let dots=''; for(let i=0;i<d.slots;i++) dots+=`<div class="spell-slot ${i<d.used?'used':''}" onclick="toggleSlot(${lvl},${i})"></div>`; slots=`<div class="spell-slots-row">${dots}<span class="spell-slots-label">${d.used}/${d.slots}</span></div>`; }
     const list=d.list.map((sp,i)=>{ if(!state.editMode&&!sp.trim())return''; const isPrepared=d.prep[i]||false;
-      return`<div class="spell-entry">${lvl>0?`<div class="spell-dot ${isPrepared?'prepared':''}" onclick="togglePrepared(${lvl},${i})"></div>`:''} ${state.editMode?`<input value="${sp}" placeholder="Nombre del conjuro..." onchange="state.spells[${lvl}].list[${i}]=this.value" style="${inpStyle}">`:`<span class="spell-name">${sp}</span>`}</div>`;
+      return`<div class="spell-entry">${lvl>0?`<div class="spell-dot ${isPrepared?'prepared':''}" onclick="togglePrepared(${lvl},${i})"></div>`:''} ${state.editMode?`<input value="${sp}" placeholder="Nombre del conjuro..." onchange="state.spells[${lvl}].list[${i}]=this.value" style="${inpStyle}"><button class="del-btn" onclick="removeSpell(${lvl},${i})" style="margin-left:4px;">✕</button>`:`<span class="spell-name">${sp}</span>`}</div>`;
     }).join('');
-    el.innerHTML+=`<div class="spell-level-block"><div class="spell-level-header"><span class="spell-level-num">${lvl}</span><span class="spell-level-title">${lnames[lvl]}</span>${slots} ${state.editMode&&lvl>0?`<input type="number" min="0" max="9" value="${d.slots}" onchange="state.spells[${lvl}].slots=+this.value;renderSpells()" style="width:34px;text-align:center;background:#0a0805;border:1px solid var(--accent);border-radius:4px;color:var(--text);font-size:12px;padding:2px;outline:none;">`:''}</div><div class="spell-list">${list||'<span style="color:var(--muted);font-size:13px;font-style:italic;">Sin conjuros</span>'}</div></div>`;
+    const addSpellBtn = state.editMode ? `<button class="add-btn" onclick="addSpell(${lvl})" style="margin-top:4px;">+ Agregar conjuro</button>` : '';
+    el.innerHTML+=`<div class="spell-level-block"><div class="spell-level-header"><span class="spell-level-num">${lvl}</span><span class="spell-level-title">${lnames[lvl]}</span>${slots} ${state.editMode&&lvl>0?`<input type="number" min="0" max="9" value="${d.slots}" onchange="state.spells[${lvl}].slots=+this.value;renderSpells()" style="width:34px;text-align:center;background:var(--surface-dim);border:none;border-bottom:1px solid var(--tertiary-container);color:var(--on-surface);font-size:12px;padding:2px;outline:none;">`:''}</div><div class="spell-list">${list||'<span style="color:var(--on-surface-muted);font-size:13px;font-style:italic;">Sin conjuros</span>'}${addSpellBtn}</div></div>`;
   }
 }
 function renderHP(){
@@ -875,6 +876,18 @@ function delAttack(i){ state.attacks.splice(i,1); renderAttacks(); }
 function addInvItem(){ state.inventory.push('Nuevo objeto'); renderInventory(); }
 function delInvItem(i){ state.inventory.splice(i,1); renderInventory(); }
 function togglePrepared(lvl,idx){ if(!state.spells[lvl].prep) state.spells[lvl].prep=state.spells[lvl].list.map(()=>false); state.spells[lvl].prep[idx]=!state.spells[lvl].prep[idx]; renderSpells(); }
+function addSpell(lvl){
+  if(!state.spells[lvl]) return;
+  state.spells[lvl].list.push('');
+  state.spells[lvl].prep.push(false);
+  renderSpells();
+}
+function removeSpell(lvl,idx){
+  if(!state.spells[lvl]) return;
+  state.spells[lvl].list.splice(idx,1);
+  state.spells[lvl].prep.splice(idx,1);
+  renderSpells();
+}
 
 // ══════════════════════════════════════
 //  DICE (original)
@@ -993,11 +1006,16 @@ function setCombatMode(mode) {
   }
   if (mode === 'spell') {
     spellSaveStat = null;
+    spellSaveOnSuccess = 'none';
     document.getElementById('spellDmgPanel').style.display = 'none';
     document.getElementById('spellSaveResult').innerHTML = '<div class="result-empty" style="padding:8px 0;">Seleccioná objetivo y stat</div>';
+    // Auto-set spell DC from character sheet
+    var dcDisplay = document.getElementById('spellDCDisplay');
+    if (dcDisplay) dcDisplay.textContent = getMySpellDC();
     renderSpellStatBtns();
     renderSpellDmgGrid();
     updateSpellSaveBtn();
+    setSpellSaveOnSuccess('none');
   }
 }
 
@@ -1104,6 +1122,14 @@ async function rollManualDamage() {
 }
 
 // ── SPELL (SAVING THROW) ─────────────
+let spellSaveOnSuccess = 'none'; // 'none' or 'half'
+
+function getMySpellDC() {
+  var abilityKey = state.spellAbilityKey || 'int';
+  var abilityMod = Math.floor(((state.stats[abilityKey] || 10) - 10) / 2);
+  return 8 + abilityMod + (state.profBonus || 2);
+}
+
 function renderSpellStatBtns() {
   var row = document.getElementById('spellSaveStatRow');
   if (!row) return;
@@ -1120,6 +1146,14 @@ function setSpellSaveStat(stat) {
   updateSpellSaveBtn();
 }
 
+function setSpellSaveOnSuccess(mode) {
+  spellSaveOnSuccess = mode;
+  var noneBtn = document.getElementById('spellSuccessNoneBtn');
+  var halfBtn = document.getElementById('spellSuccessHalfBtn');
+  if (noneBtn) noneBtn.className = 'adv-btn' + (mode === 'none' ? ' adv-active' : '');
+  if (halfBtn) halfBtn.className = 'adv-btn' + (mode === 'half' ? ' adv-active' : '');
+}
+
 function updateSpellSaveBtn() {
   var btn = document.getElementById('spellSaveRollBtn');
   if (btn) btn.disabled = !combatState.selectedTarget || !spellSaveStat;
@@ -1127,7 +1161,17 @@ function updateSpellSaveBtn() {
 
 async function rollSpellSave() {
   if (!combatState.selectedTarget || !spellSaveStat) return;
-  var spellDC = parseInt(document.getElementById('spellDCInput').value) || 13;
+  var spellDC = getMySpellDC();
+  // Update display
+  var dcDisp = document.getElementById('spellDCDisplay');
+  if (dcDisp) dcDisp.textContent = spellDC;
+
+  // Show rolling animation
+  var area = document.getElementById('spellSaveResult');
+  area.innerHTML = '<div style="text-align:center;padding:16px;"><div class="spinner"></div><div style="margin-top:8px;font-family:Cinzel,serif;font-size:12px;color:var(--on-surface-muted);letter-spacing:2px;">TIRANDO SALVACIÓN...</div></div>';
+
+  // Small delay for dramatic effect
+  await new Promise(function(r) { setTimeout(r, 800); });
 
   try {
     var data = await api('/tables/' + combatState.tableId + '/combat/saving-throw', {
@@ -1135,21 +1179,28 @@ async function rollSpellSave() {
       body: JSON.stringify({ defender_character_id: combatState.selectedTarget, stat: spellSaveStat, spell_dc: spellDC })
     });
 
-    var area = document.getElementById('spellSaveResult');
     var success = data.success;
+
+    // Animate the result
     area.innerHTML =
-      '<div class="result-formula">Salvación de ' + data.stat_name + ' — CD ' + spellDC + '</div>' +
-      '<div class="result-dice-row"><div class="result-die-chip' + (data.roll === 20 ? ' max' : '') + (data.roll === 1 ? ' min' : '') + '">' + data.roll + '</div></div>' +
-      '<div style="font-size:11px;color:var(--on-surface-muted);">d20(' + data.roll + ') + ' + data.stat_mod + (data.prof_bonus ? ' + ' + data.prof_bonus + ' prof' : '') + ' = ' + data.total + '</div>' +
-      '<div class="result-total" style="font-size:32px;color:' + (success ? 'var(--green-bright)' : 'var(--red-bright)') + ';">' + data.total + '</div>' +
-      '<div style="margin-top:6px;font-family:Cinzel,serif;font-size:13px;color:' + (success ? 'var(--green-bright)' : 'var(--red-bright)') + ';">' + (success ? '✓ SALVACIÓN EXITOSA' : '✖ FALLA LA SALVACIÓN') + '</div>';
+      '<div class="result-formula">' + data.defender_name + ' — Salvación de ' + data.stat_name + '</div>' +
+      '<div style="font-size:10px;color:var(--on-surface-muted);margin-bottom:8px;">CD ' + spellDC + ' | Mod ' + (data.stat_mod >= 0 ? '+' : '') + data.stat_mod + (data.prof_bonus ? ' | Prof +' + data.prof_bonus : '') + '</div>' +
+      '<div class="result-dice-row" style="animation:fadeIn .3s ease;"><div class="result-die-chip' + (data.roll === 20 ? ' max' : '') + (data.roll === 1 ? ' min' : '') + '" style="font-size:24px;padding:10px 16px;">' + data.roll + '</div></div>' +
+      '<div class="result-total" style="font-size:36px;color:' + (success ? 'var(--green-bright)' : 'var(--red-bright)') + ';animation:' + (success ? 'pulseGold' : 'pulseRed') + ' .5s ease;">' + data.total + '</div>' +
+      '<div style="margin-top:8px;font-family:Cinzel,serif;font-size:14px;letter-spacing:2px;color:' + (success ? 'var(--green-bright)' : 'var(--red-bright)') + ';">' + (success ? '✓ SALVACIÓN EXITOSA' : '✖ FALLA LA SALVACIÓN') + '</div>';
 
     if (!success) {
+      // Failed save: show damage panel
       document.getElementById('spellDmgPanel').style.display = 'block';
+    } else if (spellSaveOnSuccess === 'half') {
+      // Success but half damage
+      document.getElementById('spellDmgPanel').style.display = 'block';
+      var dmgLabel = document.getElementById('spellDmgPanelLabel');
+      if (dmgLabel) dmgLabel.textContent = 'Daño del Conjuro (mitad por salvación exitosa)';
     } else {
+      // Full success, no damage
       document.getElementById('spellDmgPanel').style.display = 'none';
-      // Salvación exitosa: pasar turno
-      setTimeout(function() { passTurn(); }, 2000);
+      setTimeout(function() { passTurn(); }, 2500);
     }
   } catch (err) { showToast(err.message, true); }
 }
@@ -1185,17 +1236,27 @@ async function rollSpellDamage() {
   var rolls = [];
   for (var i = 0; i < spellDmgQty; i++) rolls.push(Math.floor(Math.random() * spellDmgDie) + 1);
   var sum = rolls.reduce(function(a, b) { return a + b; }, 0);
-  var total = Math.max(0, sum + modRaw);
+  var rawTotal = Math.max(0, sum + modRaw);
+
+  // Check if this is half damage (successful save with half-on-success)
+  var isHalf = false;
+  var spellResult = document.getElementById('spellSaveResult');
+  if (spellResult && spellResult.innerHTML.indexOf('EXITOSA') !== -1 && spellSaveOnSuccess === 'half') {
+    isHalf = true;
+  }
+  var total = isHalf ? Math.floor(rawTotal / 2) : rawTotal;
 
   var area = document.getElementById('spellDmgResult');
   var chips = rolls.map(function(r) { return '<div class="result-die-chip' + (r === spellDmgDie ? ' max' : '') + (r === 1 ? ' min' : '') + '">' + r + '</div>'; }).join('');
   area.innerHTML =
     '<div class="result-formula">' + spellDmgQty + 'd' + spellDmgDie + (modRaw ? (modRaw > 0 ? '+' : '') + modRaw : '') + '</div>' +
     '<div class="result-dice-row">' + chips + '</div>' +
-    '<div class="result-total" style="font-size:36px;color:var(--red-bright);">' + total + ' daño</div>';
+    (isHalf ? '<div style="font-size:11px;color:var(--on-surface-muted);margin:4px 0;">Total: ' + rawTotal + ' → Mitad: ' + total + '</div>' : '') +
+    '<div class="result-total" style="font-size:36px;color:var(--red-bright);">' + total + ' daño</div>' +
+    (isHalf ? '<div style="font-size:10px;color:var(--on-surface-muted);font-family:Manrope,sans-serif;">Daño reducido por salvación exitosa</div>' : '');
 
   try {
-    var desc = 'Conjuro ' + spellDmgQty + 'd' + spellDmgDie + (modRaw ? (modRaw > 0 ? '+' : '') + modRaw : '');
+    var desc = 'Conjuro ' + spellDmgQty + 'd' + spellDmgDie + (modRaw ? (modRaw > 0 ? '+' : '') + modRaw : '') + (isHalf ? ' (mitad)' : '');
     var data = await api('/tables/' + combatState.tableId + '/combat/manual-damage', {
       method: 'POST',
       body: JSON.stringify({ defender_character_id: combatState.selectedTarget, damage: total, description: desc })
