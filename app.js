@@ -26,16 +26,16 @@ const state = {
   attacks:[],
   inventory:[],
   spells:{
-    0:{slots:0,used:0,list:['','','','','',''],prep:[false,false,false,false,false,false]},
-    1:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
-    2:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
-    3:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
-    4:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
-    5:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
-    6:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
-    7:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
-    8:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
-    9:{slots:0,used:0,list:['','','','','','','','','','','',''],prep:[false,false,false,false,false,false,false,false,false,false,false,false]},
+    0:{slots:0,used:0,list:[],prep:[]},
+    1:{slots:0,used:0,list:[],prep:[]},
+    2:{slots:0,used:0,list:[],prep:[]},
+    3:{slots:0,used:0,list:[],prep:[]},
+    4:{slots:0,used:0,list:[],prep:[]},
+    5:{slots:0,used:0,list:[],prep:[]},
+    6:{slots:0,used:0,list:[],prep:[]},
+    7:{slots:0,used:0,list:[],prep:[]},
+    8:{slots:0,used:0,list:[],prep:[]},
+    9:{slots:0,used:0,list:[],prep:[]},
   }
 };
 
@@ -211,16 +211,19 @@ async function openCharacter(id) {
 }
 
 function ensureSpells(spells) {
-  var defaultList = function() { return ['','','','','','']; };
-  var defaultPrep = function() { return [false,false,false,false,false,false]; };
   var result = {};
   for (var lvl = 0; lvl <= 9; lvl++) {
     var existing = (spells && spells[lvl]) ? spells[lvl] : {};
+    var list = (existing.list && Array.isArray(existing.list)) ? existing.list : [];
+    var prep = (existing.prep && Array.isArray(existing.prep)) ? existing.prep : [];
+    // Sync prep length
+    while(prep.length < list.length) prep.push(false);
+    while(prep.length > list.length) prep.pop();
     result[lvl] = {
       slots: existing.slots || 0,
       used: existing.used || 0,
-      list: (existing.list && existing.list.length > 0) ? existing.list : defaultList(),
-      prep: (existing.prep && existing.prep.length > 0) ? existing.prep : defaultPrep()
+      list: list,
+      prep: prep
     };
   }
   return result;
@@ -791,18 +794,78 @@ function renderSpellMeta(){
 function renderSpells(){
   const el=document.getElementById('spellLevels'); if(!el)return; el.innerHTML=''; renderSpellMeta();
   const lnames=['Trucos','Nivel 1','Nivel 2','Nivel 3','Nivel 4','Nivel 5','Nivel 6','Nivel 7','Nivel 8','Nivel 9'];
-  const inpStyle='flex:1;background:var(--surface-dim,#0a0805);border:none;border-bottom:1px solid var(--tertiary-container,#4c2a8c);color:var(--on-surface,#e8e1dd);font-family:Crimson Text,serif;font-size:15px;padding:4px 6px;outline:none;';
+  const inpStyle='flex:1;background:var(--surface-dim,#111010);border:none;border-bottom:1px solid var(--tertiary-container,#4c2a8c);color:var(--on-surface,#e8e1dd);font-family:Crimson Text,serif;font-size:15px;padding:4px 6px;outline:none;';
+  const slotInpStyle='width:34px;text-align:center;background:var(--surface-dim,#111010);border:none;border-bottom:1px solid var(--tertiary-container,#4c2a8c);color:var(--on-surface,#e8e1dd);font-size:12px;padding:2px;outline:none;';
+
   for(let lvl=0;lvl<=9;lvl++){
-    const d=state.spells[lvl]; if(!d) continue;
-    if(!d.prep) d.prep=d.list.map(()=>false);
-    if(lvl>2&&!d.list.some(s=>s.trim())&&d.slots===0&&!state.editMode)continue;
-    let slots='';
-    if(lvl>0&&d.slots>0){ let dots=''; for(let i=0;i<d.slots;i++) dots+=`<div class="spell-slot ${i<d.used?'used':''}" onclick="toggleSlot(${lvl},${i})"></div>`; slots=`<div class="spell-slots-row">${dots}<span class="spell-slots-label">${d.used}/${d.slots}</span></div>`; }
-    const list=d.list.map((sp,i)=>{ if(!state.editMode&&!sp.trim())return''; const isPrepared=d.prep[i]||false;
-      return`<div class="spell-entry">${lvl>0?`<div class="spell-dot ${isPrepared?'prepared':''}" onclick="togglePrepared(${lvl},${i})"></div>`:''} ${state.editMode?`<input value="${sp}" placeholder="Nombre del conjuro..." onchange="state.spells[${lvl}].list[${i}]=this.value" style="${inpStyle}"><button class="del-btn" onclick="removeSpell(${lvl},${i})" style="margin-left:4px;">✕</button>`:`<span class="spell-name">${sp}</span>`}</div>`;
-    }).join('');
-    const addSpellBtn = state.editMode ? `<button class="add-btn" onclick="addSpell(${lvl})" style="margin-top:4px;">+ Agregar conjuro</button>` : '';
-    el.innerHTML+=`<div class="spell-level-block"><div class="spell-level-header"><span class="spell-level-num">${lvl}</span><span class="spell-level-title">${lnames[lvl]}</span>${slots} ${state.editMode&&lvl>0?`<input type="number" min="0" max="9" value="${d.slots}" onchange="state.spells[${lvl}].slots=+this.value;renderSpells()" style="width:34px;text-align:center;background:var(--surface-dim);border:none;border-bottom:1px solid var(--tertiary-container);color:var(--on-surface);font-size:12px;padding:2px;outline:none;">`:''}</div><div class="spell-list">${list||'<span style="color:var(--on-surface-muted);font-size:13px;font-style:italic;">Sin conjuros</span>'}${addSpellBtn}</div></div>`;
+    // Asegurar que el nivel existe
+    if(!state.spells[lvl]){
+      state.spells[lvl] = {slots:0, used:0, list:[], prep:[]};
+    }
+    const d = state.spells[lvl];
+    if(!d.list) d.list = [];
+    if(!d.prep) d.prep = d.list.map(()=>false);
+    // Sync prep length with list
+    while(d.prep.length < d.list.length) d.prep.push(false);
+
+    // En modo vista: ocultar niveles vacíos (3+) sin slots
+    const hasContent = d.list.some(s=>s && s.trim());
+    if(!state.editMode && lvl > 2 && !hasContent && d.slots === 0) continue;
+
+    // Slots de nivel (bolitas gastables)
+    let slotsHTML = '';
+    if(lvl > 0 && d.slots > 0){
+      let dots = '';
+      for(let i=0;i<d.slots;i++){
+        dots += '<div class="spell-slot '+(i<d.used?'used':'')+'" onclick="toggleSlot('+lvl+','+i+')"></div>';
+      }
+      slotsHTML = '<div class="spell-slots-row">'+dots+'<span class="spell-slots-label">'+d.used+'/'+d.slots+'</span></div>';
+    }
+
+    // Slot count editor (solo en edit mode, solo niveles 1+)
+    let slotEditor = '';
+    if(state.editMode && lvl > 0){
+      slotEditor = '<input type="number" min="0" max="9" value="'+d.slots+'" onchange="state.spells['+lvl+'].slots=+this.value;renderSpells()" style="'+slotInpStyle+'">';
+    }
+
+    // Lista de conjuros
+    let listHTML = '';
+    d.list.forEach(function(sp, i){
+      // En modo vista, no mostrar vacíos
+      if(!state.editMode && (!sp || !sp.trim())) return;
+      const isPrepared = d.prep[i] || false;
+      let entry = '<div class="spell-entry">';
+      // Dot de preparado (TODOS los niveles, incluido trucos)
+      entry += '<div class="spell-dot '+(isPrepared?'prepared':'')+'" onclick="togglePrepared('+lvl+','+i+')" title="'+(isPrepared?'Preparado':'Sin preparar')+'"></div>';
+      if(state.editMode){
+        entry += '<input value="'+(sp||'').replace(/"/g,'&quot;')+'" placeholder="Nombre del conjuro..." onchange="state.spells['+lvl+'].list['+i+']=this.value" style="'+inpStyle+'">';
+        entry += '<button class="del-btn" onclick="removeSpell('+lvl+','+i+')" style="margin-left:4px;">✕</button>';
+      } else {
+        entry += '<span class="spell-name">'+sp+'</span>';
+      }
+      entry += '</div>';
+      listHTML += entry;
+    });
+
+    // Si no hay nada y no estamos editando
+    if(!listHTML && !state.editMode){
+      listHTML = '<span style="color:var(--on-surface-muted,#7a6f63);font-size:13px;font-style:italic;">Sin conjuros</span>';
+    }
+
+    // Botón agregar (siempre en edit mode)
+    let addBtn = '';
+    if(state.editMode){
+      addBtn = '<button class="add-btn" onclick="addSpell('+lvl+')" style="margin-top:4px;">+ Agregar '+(lvl===0?'truco':'conjuro')+'</button>';
+    }
+
+    el.innerHTML += '<div class="spell-level-block">' +
+      '<div class="spell-level-header">' +
+        '<span class="spell-level-num">'+lvl+'</span>' +
+        '<span class="spell-level-title">'+lnames[lvl]+'</span>' +
+        slotsHTML + slotEditor +
+      '</div>' +
+      '<div class="spell-list">' + listHTML + addBtn + '</div>' +
+    '</div>';
   }
 }
 function renderHP(){
