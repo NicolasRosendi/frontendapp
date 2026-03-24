@@ -50,6 +50,7 @@
   <div class="lobby-nav">
     <button class="lobby-nav-btn active" onclick="switchLobbyTab('chars',this)">Mis Fichas</button>
     <button class="lobby-nav-btn" onclick="switchLobbyTab('tables',this)">Mesas</button>
+    <button class="lobby-nav-btn" onclick="switchLobbyTab('encyclopedia',this)">Enciclopedia</button>
   </div>
   <div class="lobby-panel active" id="lobby-chars">
     <button class="auth-submit" style="margin-bottom:14px;font-size:12px;" onclick="createCharacter()">+ Nueva Ficha</button>
@@ -87,6 +88,50 @@
     <div class="section-divider"></div>
     <div class="card-title" style="padding:0 0 10px;">Mesas Públicas</div>
     <div id="publicTableListContainer"><div class="spinner"></div></div>
+  </div>
+
+  <!-- Encyclopedia panel -->
+  <div class="lobby-panel" id="lobby-encyclopedia">
+    <!-- Category selector -->
+    <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;" id="encCategoryRow">
+      <button class="adv-btn adv-active" onclick="setEncCategory('spells')">✦ Conjuros</button>
+      <button class="adv-btn" onclick="setEncCategory('classes')">⚔ Clases</button>
+      <button class="adv-btn" onclick="setEncCategory('races')">♦ Razas</button>
+      <button class="adv-btn" onclick="setEncCategory('combat')">⚜ Combate</button>
+      <button class="adv-btn" onclick="setEncCategory('spellrules')">📜 Magia</button>
+    </div>
+
+    <!-- Search & Filters (visible for spells) -->
+    <div id="encSpellFilters">
+      <input class="create-input" id="encSearchInput" placeholder="Buscar conjuro..." oninput="renderEncyclopedia()" style="width:100%;margin-bottom:8px;">
+      <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">
+        <button class="adv-btn adv-active" onclick="setEncSpellLevel('all')" id="encLvlAll" style="font-size:9px;padding:6px 8px;">Todos</button>
+        <button class="adv-btn" onclick="setEncSpellLevel(0)" id="encLvl0" style="font-size:9px;padding:6px 8px;">Trucos</button>
+        <button class="adv-btn" onclick="setEncSpellLevel(1)" id="encLvl1" style="font-size:9px;padding:6px 8px;">Nv1</button>
+        <button class="adv-btn" onclick="setEncSpellLevel(2)" id="encLvl2" style="font-size:9px;padding:6px 8px;">Nv2</button>
+        <button class="adv-btn" onclick="setEncSpellLevel(3)" id="encLvl3" style="font-size:9px;padding:6px 8px;">Nv3</button>
+        <button class="adv-btn" onclick="setEncSpellLevel(4)" id="encLvl4" style="font-size:9px;padding:6px 8px;">Nv4</button>
+        <button class="adv-btn" onclick="setEncSpellLevel(5)" id="encLvl5" style="font-size:9px;padding:6px 8px;">Nv5</button>
+        <button class="adv-btn" onclick="setEncSpellLevel(6)" id="encLvl6" style="font-size:9px;padding:6px 8px;">Nv6</button>
+        <button class="adv-btn" onclick="setEncSpellLevel(7)" id="encLvl7" style="font-size:9px;padding:6px 8px;">Nv7</button>
+        <button class="adv-btn" onclick="setEncSpellLevel(8)" id="encLvl8" style="font-size:9px;padding:6px 8px;">Nv8</button>
+        <button class="adv-btn" onclick="setEncSpellLevel(9)" id="encLvl9" style="font-size:9px;padding:6px 8px;">Nv9</button>
+      </div>
+      <div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="adv-btn adv-active" onclick="setEncSpellClass('all')" id="encClsAll" style="font-size:9px;padding:6px 8px;">Todas</button>
+        <button class="adv-btn" onclick="setEncSpellClass('Bardo')" id="encClsBardo" style="font-size:9px;padding:6px 8px;">Bardo</button>
+        <button class="adv-btn" onclick="setEncSpellClass('Brujo')" id="encClsBrujo" style="font-size:9px;padding:6px 8px;">Brujo</button>
+        <button class="adv-btn" onclick="setEncSpellClass('Clérigo')" id="encClsClérigo" style="font-size:9px;padding:6px 8px;">Clérigo</button>
+        <button class="adv-btn" onclick="setEncSpellClass('Druida')" id="encClsDruida" style="font-size:9px;padding:6px 8px;">Druida</button>
+        <button class="adv-btn" onclick="setEncSpellClass('Hechicero')" id="encClsHechicero" style="font-size:9px;padding:6px 8px;">Hechicero</button>
+        <button class="adv-btn" onclick="setEncSpellClass('Mago')" id="encClsMago" style="font-size:9px;padding:6px 8px;">Mago</button>
+        <button class="adv-btn" onclick="setEncSpellClass('Paladín')" id="encClsPaladín" style="font-size:9px;padding:6px 8px;">Paladín</button>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="encResults" style="padding-bottom:40px;"></div>
+    <div id="encSpellCount" style="text-align:center;font-family:Manrope,sans-serif;font-size:11px;color:var(--on-surface-muted);padding:8px;"></div>
   </div>
 </div>
 
@@ -417,6 +462,7 @@
 
 </div><!-- /app-wrapper -->
 
+<script src="encyclopedia-data.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
