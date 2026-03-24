@@ -1376,3 +1376,204 @@ enterCombatView = function(data) {
   renderManualDmgGrid();
   renderSpellDmgGrid();
 };
+
+// ══════════════════════════════════════
+//  ENCYCLOPEDIA
+// ══════════════════════════════════════
+var encCategory = 'spells';
+var encSpellLevel = 'all';
+var encSpellClass = 'all';
+var encExpandedSpell = null;
+
+function setEncCategory(cat) {
+  encCategory = cat;
+  // Update buttons
+  var btns = document.getElementById('encCategoryRow');
+  if (btns) {
+    var children = btns.querySelectorAll('.adv-btn');
+    var labels = ['spells','classes','races','combat','spellrules'];
+    children.forEach(function(b, i) {
+      b.className = 'adv-btn' + (labels[i] === cat ? ' adv-active' : '');
+    });
+  }
+  // Show/hide spell filters
+  var filters = document.getElementById('encSpellFilters');
+  if (filters) filters.style.display = cat === 'spells' ? 'block' : 'none';
+  encExpandedSpell = null;
+  renderEncyclopedia();
+}
+
+function setEncSpellLevel(lvl) {
+  encSpellLevel = lvl;
+  // Update buttons
+  var ids = ['All',0,1,2,3,4,5,6,7,8,9];
+  ids.forEach(function(id) {
+    var btn = document.getElementById('encLvl' + (id === 'All' ? 'All' : id));
+    if (btn) btn.className = 'adv-btn' + ((lvl === 'all' && id === 'All') || lvl === id ? ' adv-active' : '');
+  });
+  renderEncyclopedia();
+}
+
+function setEncSpellClass(cls) {
+  encSpellClass = cls;
+  var classes = ['all','Bardo','Brujo','Clérigo','Druida','Hechicero','Mago','Paladín'];
+  classes.forEach(function(c) {
+    var btn = document.getElementById('encCls' + (c === 'all' ? 'All' : c));
+    if (btn) btn.className = 'adv-btn' + (encSpellClass === c ? ' adv-active' : '');
+  });
+  renderEncyclopedia();
+}
+
+function toggleEncSpell(idx) {
+  encExpandedSpell = encExpandedSpell === idx ? null : idx;
+  renderEncyclopedia();
+}
+
+function renderEncyclopedia() {
+  var container = document.getElementById('encResults');
+  var countEl = document.getElementById('encSpellCount');
+  if (!container) return;
+
+  if (encCategory === 'spells') {
+    renderEncSpells(container, countEl);
+  } else if (encCategory === 'classes') {
+    renderEncClasses(container);
+    if (countEl) countEl.textContent = '';
+  } else if (encCategory === 'races') {
+    renderEncRaces(container);
+    if (countEl) countEl.textContent = '';
+  } else if (encCategory === 'combat') {
+    renderEncRules(container, ENCYCLOPEDIA_DATA.combat_rules, 'Reglas de Combate');
+    if (countEl) countEl.textContent = '';
+  } else if (encCategory === 'spellrules') {
+    renderEncRules(container, ENCYCLOPEDIA_DATA.spell_rules, 'Reglas de Magia');
+    if (countEl) countEl.textContent = '';
+  }
+}
+
+function renderEncSpells(container, countEl) {
+  var search = (document.getElementById('encSearchInput') || {}).value || '';
+  search = search.toLowerCase().trim();
+
+  var filtered = SPELLS_DATA.filter(function(s) {
+    if (encSpellLevel !== 'all' && s.level !== encSpellLevel) return false;
+    if (encSpellClass !== 'all' && s.classes.indexOf(encSpellClass) === -1) return false;
+    if (search && s.name.toLowerCase().indexOf(search) === -1 && s.school.toLowerCase().indexOf(search) === -1) return false;
+    return true;
+  });
+
+  if (countEl) countEl.textContent = filtered.length + ' conjuro' + (filtered.length !== 1 ? 's' : '') + ' encontrado' + (filtered.length !== 1 ? 's' : '');
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--on-surface-muted);font-style:italic;">No se encontraron conjuros</div>';
+    return;
+  }
+
+  var schoolColors = {
+    'Abjuración': '#4a9eff',
+    'Adivinación': '#c8c8c8',
+    'Conjuración': '#ffcc44',
+    'Encantamiento': '#ff69b4',
+    'Evocación': '#ff6644',
+    'Ilusión': '#bf7fff',
+    'Nigromancia': '#66cc66',
+    'Transmutación': '#ff9933'
+  };
+
+  var schoolIcons = {
+    'Abjuración': '🛡',
+    'Adivinación': '👁',
+    'Conjuración': '✦',
+    'Encantamiento': '💫',
+    'Evocación': '🔥',
+    'Ilusión': '🌀',
+    'Nigromancia': '💀',
+    'Transmutación': '⚗'
+  };
+
+  container.innerHTML = filtered.map(function(s, idx) {
+    var realIdx = SPELLS_DATA.indexOf(s);
+    var isExpanded = encExpandedSpell === realIdx;
+    var color = schoolColors[s.school] || '#c9a84c';
+    var icon = schoolIcons[s.school] || '✦';
+    var levelText = s.level === 0 ? 'Truco' : 'Nivel ' + s.level;
+
+    var html = '<div class="enc-spell-card" onclick="toggleEncSpell(' + realIdx + ')" style="border-left-color:' + color + ';">';
+    html += '<div class="enc-spell-header">';
+    html += '<div class="enc-spell-icon" style="color:' + color + ';">' + icon + '</div>';
+    html += '<div class="enc-spell-info">';
+    html += '<div class="enc-spell-name">' + s.name + '</div>';
+    html += '<div class="enc-spell-meta">' + s.school + ' · ' + levelText + (s.ritual ? ' · Ritual' : '') + '</div>';
+    html += '</div>';
+    html += '<div class="enc-spell-level" style="color:' + color + ';">' + (s.level === 0 ? '⊙' : s.level) + '</div>';
+    html += '</div>';
+
+    if (isExpanded) {
+      html += '<div class="enc-spell-details">';
+      html += '<div class="enc-detail-row"><span class="enc-detail-label">Tiempo</span><span>' + (s.casting_time || '—') + '</span></div>';
+      html += '<div class="enc-detail-row"><span class="enc-detail-label">Alcance</span><span>' + (s.range || '—') + '</span></div>';
+      html += '<div class="enc-detail-row"><span class="enc-detail-label">Componentes</span><span>' + (s.components || '—') + '</span></div>';
+      html += '<div class="enc-detail-row"><span class="enc-detail-label">Duración</span><span>' + (s.duration || '—') + '</span></div>';
+      if (s.classes && s.classes.length > 0) {
+        html += '<div class="enc-detail-row"><span class="enc-detail-label">Clases</span><span>' + s.classes.join(', ') + '</span></div>';
+      }
+      html += '<div class="enc-spell-desc">' + (s.description || 'Sin descripción disponible.') + '</div>';
+      html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+  }).join('');
+}
+
+function renderEncClasses(container) {
+  var classes = ENCYCLOPEDIA_DATA.classes;
+  container.innerHTML = '<div class="enc-section-title">Clases de Personaje</div>' +
+    classes.map(function(c) {
+      return '<div class="enc-class-card">' +
+        '<div class="enc-class-header">' +
+          '<div class="enc-class-name">' + c.name + '</div>' +
+          '<div class="enc-class-die">' + c.hit_die + '</div>' +
+        '</div>' +
+        '<div class="enc-detail-row"><span class="enc-detail-label">Característica principal</span><span>' + c.primary + '</span></div>' +
+        '<div class="enc-detail-row"><span class="enc-detail-label">Salvaciones</span><span>' + c.saves + '</span></div>' +
+        '<div class="enc-detail-row"><span class="enc-detail-label">Armaduras</span><span>' + c.armor + '</span></div>' +
+        '<div class="enc-detail-row"><span class="enc-detail-label">Armas</span><span>' + c.weapons + '</span></div>' +
+        '<div class="enc-class-section">Rasgos de clase</div>' +
+        '<div class="enc-tags">' + c.features.map(function(f) { return '<span class="enc-tag">' + f + '</span>'; }).join('') + '</div>' +
+        '<div class="enc-class-section">Subclases</div>' +
+        '<div class="enc-tags">' + c.subclasses.map(function(s) { return '<span class="enc-tag enc-tag-accent">' + s + '</span>'; }).join('') + '</div>' +
+      '</div>';
+    }).join('');
+}
+
+function renderEncRaces(container) {
+  var races = ENCYCLOPEDIA_DATA.races;
+  container.innerHTML = '<div class="enc-section-title">Razas Jugables</div>' +
+    races.map(function(r) {
+      return '<div class="enc-class-card">' +
+        '<div class="enc-class-header">' +
+          '<div class="enc-class-name">' + r.name + '</div>' +
+          '<div class="enc-class-die" style="font-size:11px;">' + r.ability_increase + '</div>' +
+        '</div>' +
+        '<div class="enc-detail-row"><span class="enc-detail-label">Velocidad</span><span>' + r.speed + '</span></div>' +
+        '<div class="enc-detail-row"><span class="enc-detail-label">Tamaño</span><span>' + r.size + '</span></div>' +
+        '<div class="enc-class-section">Rasgos raciales</div>' +
+        '<div class="enc-tags">' + r.traits.map(function(t) { return '<span class="enc-tag">' + t + '</span>'; }).join('') + '</div>' +
+        (r.subraces.length > 0 ?
+          '<div class="enc-class-section">Subrazas</div>' +
+          '<div class="enc-tags">' + r.subraces.map(function(s) { return '<span class="enc-tag enc-tag-accent">' + s + '</span>'; }).join('') + '</div>'
+          : '') +
+      '</div>';
+    }).join('');
+}
+
+function renderEncRules(container, rules, title) {
+  container.innerHTML = '<div class="enc-section-title">' + title + '</div>' +
+    rules.map(function(r) {
+      return '<div class="enc-rule-card">' +
+        '<div class="enc-rule-title">' + r.title + '</div>' +
+        '<div class="enc-rule-content">' + r.content + '</div>' +
+      '</div>';
+    }).join('');
+}
