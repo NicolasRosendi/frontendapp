@@ -210,6 +210,22 @@ async function openCharacter(id) {
   } catch (err) { showToast(err.message, true); }
 }
 
+function ensureSpells(spells) {
+  var defaultList = function() { return ['','','','','','']; };
+  var defaultPrep = function() { return [false,false,false,false,false,false]; };
+  var result = {};
+  for (var lvl = 0; lvl <= 9; lvl++) {
+    var existing = (spells && spells[lvl]) ? spells[lvl] : {};
+    result[lvl] = {
+      slots: existing.slots || 0,
+      used: existing.used || 0,
+      list: (existing.list && existing.list.length > 0) ? existing.list : defaultList(),
+      prep: (existing.prep && existing.prep.length > 0) ? existing.prep : defaultPrep()
+    };
+  }
+  return result;
+}
+
 function loadStateFromData(d, name) {
   state.editMode = false;
   state.inspiration = d.inspiration || false;
@@ -225,7 +241,7 @@ function loadStateFromData(d, name) {
   state.spellAbilityKey = d.spellAbilityKey || 'int';
   state.attacks = d.attacks || [];
   state.inventory = d.inventory || [];
-  state.spells = d.spells || state.spells;
+  state.spells = ensureSpells(d.spells);
   // Text fields
   textFields = {};
   const tf = ['charName','class','background','race','alignment','player','xp','proficiencies','personality','ideals','bonds','flaws','traits','age','height','weight','eyes','skin','hair','appearance','backstory','allies','treasure','additionalTraits','ac','initiative','speed','hitDice','hdTotal','armorCA','armorName','coinPP','coinPO','coinPE','coinPPT','coinPC','spellAbility'];
