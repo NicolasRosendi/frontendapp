@@ -11,6 +11,8 @@ let currentToken = null;
 let currentCharId = null;
 let authMode = 'login'; // 'login' | 'register'
 let combatPollInterval = null;
+let tableRoomPollInterval = null;
+let currentTableId = null;
 
 const state = {
   editMode: false,
@@ -86,8 +88,11 @@ function showScreen(name) {
   document.getElementById('authScreen').style.display = name === 'auth' ? 'flex' : 'none';
   document.getElementById('lobbyScreen').className = 'lobby-screen' + (name === 'lobby' ? ' active' : '');
   document.getElementById('combatScreen').className = 'combat-screen' + (name === 'combat' ? ' active' : '');
+  var trEl = document.getElementById('tableRoomScreen');
+  if (trEl) trEl.className = 'combat-screen' + (name === 'tableRoom' ? ' active' : '');
   document.getElementById('appWrapper').className = 'app-wrapper' + (name === 'sheet' ? ' active' : '');
   if (name !== 'combat' && combatPollInterval) { clearInterval(combatPollInterval); combatPollInterval = null; }
+  if (name !== 'tableRoom' && tableRoomPollInterval) { clearInterval(tableRoomPollInterval); tableRoomPollInterval = null; }
 }
 
 // ══════════════════════════════════════
@@ -192,13 +197,55 @@ async function createCharacter() {
   } catch (err) { showToast(err.message, true); }
 }
 
-async function deleteCharacter(id, name) {
-  if (!confirm('¿Borrar la ficha "' + name + '"?')) return;
-  try {
-    await api('/characters/' + id, { method: 'DELETE' });
-    showToast('Ficha eliminada');
-    loadCharacters();
-  } catch (err) { showToast(err.message, true); }
+function deleteCharacter(id, name) {
+  showConfirmDialog(
+    '¿Borrar ficha?',
+    'Estás por eliminar la ficha <strong>"' + name + '"</strong>. Esta acción no se puede deshacer.',
+    'Sí, borrar',
+    'Cancelar',
+    async function() {
+      try {
+        await api('/characters/' + id, { method: 'DELETE' });
+        showToast('Ficha eliminada');
+        loadCharacters();
+      } catch (err) { showToast(err.message, true); }
+    }
+  );
+}
+
+function showConfirmDialog(title, message, confirmText, cancelText, onConfirm) {
+  // Remove existing dialog if any
+  var existing = document.getElementById('confirmDialog');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'confirmDialog';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:10000;display:flex;align-items:center;justify-content:center;padding:24px;';
+
+  overlay.innerHTML =
+    '<div style="background:var(--surface-container);width:100%;max-width:340px;border-left:3px solid var(--red-bright);">' +
+      '<div style="padding:20px 20px 0;">' +
+        '<div style="font-family:Cinzel,serif;font-size:15px;font-weight:700;color:var(--red-bright);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">' + title + '</div>' +
+        '<div style="font-family:Crimson Text,serif;font-size:15px;color:var(--on-surface-dim);line-height:1.5;">' + message + '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;padding:20px;">' +
+        '<button id="confirmDialogCancel" style="flex:1;padding:12px;background:var(--surface-container-low);border:none;border-bottom:1px solid var(--outline-variant);color:var(--on-surface-muted);font-family:Cinzel,serif;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">' + cancelText + '</button>' +
+        '<button id="confirmDialogOk" style="flex:1;padding:12px;background:rgba(168,50,50,0.15);border:none;border-bottom:2px solid var(--red-bright);color:var(--red-bright);font-family:Cinzel,serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">' + confirmText + '</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('confirmDialogCancel').addEventListener('click', function() {
+    overlay.remove();
+  });
+  document.getElementById('confirmDialogOk').addEventListener('click', function() {
+    overlay.remove();
+    onConfirm();
+  });
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) overlay.remove();
+  });
 }
 
 async function openCharacter(id) {
@@ -403,6 +450,16 @@ async function loadPublicTables() {
 }
 
 async function joinPublicTable(tableId, tableName) {
+  // Verificar si ya estoy en esta mesa
+  try {
+    const myTables = await api('/tables');
+    const alreadyIn = myTables.tables.find(function(t) { return t.id === tableId; });
+    if (alreadyIn) {
+      showToast('¡Ya estás en la mesa "' + tableName + '"!', false);
+      return;
+    }
+  } catch(e) {}
+
   try {
     const chars = await api('/characters');
     if (chars.characters.length === 0) {
@@ -431,6 +488,16 @@ async function joinTableByCode() {
   if (!code || code.length < 4) { showToast('Ingresá el código de la mesa', true); return; }
   try {
     const found = await api('/tables/join/' + code);
+
+    // Verificar si ya estoy en esta mesa
+    const myTables = await api('/tables');
+    const alreadyIn = myTables.tables.find(function(t) { return t.id === found.table.id; });
+    if (alreadyIn) {
+      showToast('¡Ya estás en la mesa "' + found.table.name + '"!', false);
+      document.getElementById('joinCodeInput').value = '';
+      return;
+    }
+
     // Si es privada con password, pedirla
     let password = null;
     if (found.table.visibility === 'private' && found.table.password) {
@@ -467,15 +534,95 @@ async function openTable(tableId) {
     combatState.tableId = tableId;
     combatState.tableName = data.table.name;
     combatState.isOwner = data.table.owner_id === currentUser.id;
-
+    currentTableId = tableId;
     if (data.table.status === 'combat' && data.combat && data.combat.status === 'active') {
       enterCombatView(data);
     } else {
-      // Show table details
-      const playerList = data.players.map(p => p.username + ' → ' + p.character_name).join('\n');
-      alert('Mesa: ' + data.table.name + '\nCódigo: ' + data.table.code + '\nEstado: ' + data.table.status + '\n\nJugadores:\n' + (playerList || '(vacío)'));
+      enterTableRoom(data);
     }
   } catch (err) { showToast(err.message, true); }
+}
+
+function enterTableRoom(data) {
+  showScreen('tableRoom');
+  renderTableRoom(data);
+  if (tableRoomPollInterval) clearInterval(tableRoomPollInterval);
+  tableRoomPollInterval = setInterval(async function() {
+    try {
+      const fresh = await api('/tables/' + currentTableId);
+      if (fresh.table.status === 'combat' && fresh.combat && fresh.combat.status === 'active') {
+        clearInterval(tableRoomPollInterval); tableRoomPollInterval = null;
+        combatState.tableId = currentTableId;
+        combatState.tableName = fresh.table.name;
+        combatState.isOwner = fresh.table.owner_id === currentUser.id;
+        enterCombatView(fresh);
+      } else {
+        renderTableRoom(fresh);
+      }
+    } catch (err) { /* silenciar */ }
+  }, 3000);
+}
+
+function renderTableRoom(data) {
+  const t = data.table;
+  const isOwner = t.owner_id === currentUser.id;
+  document.getElementById('tableRoomName').textContent = '⚔ ' + t.name;
+  document.getElementById('tableRoomCode').textContent = 'Código: ' + t.code;
+  document.getElementById('tableRoomShareCode').textContent = t.code;
+  document.getElementById('tableRoomStatus').textContent =
+    t.status === 'lobby' ? '⏳ Esperando que el Dungeon Master inicie el combate...' : '⚔ En combate';
+  document.getElementById('tableRoomOwnerActions').style.display = isOwner ? 'block' : 'none';
+  const playersEl = document.getElementById('tableRoomPlayers');
+  if (!data.players || data.players.length === 0) {
+    playersEl.innerHTML = '<div style="color:var(--on-surface-muted);font-style:italic;font-family:Crimson Text,serif;font-size:14px;">No hay jugadores todavía.</div>';
+  } else {
+    playersEl.innerHTML = data.players.map(function(p) {
+      const isMe = p.user_id === currentUser.id;
+      const isDM = t.owner_id === p.user_id;
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-container-low);margin-bottom:4px;border-left:3px solid ' + (isMe ? 'var(--primary)' : 'transparent') + ';">' +
+        '<div><div style="font-family:Cinzel,serif;font-size:14px;font-weight:700;color:' + (isMe ? 'var(--primary)' : 'var(--on-surface)') + ';">' + p.character_name + '</div>' +
+        '<div style="font-family:Manrope,sans-serif;font-size:10px;color:var(--on-surface-muted);">' + p.username + (isDM ? ' · DM' : '') + (isMe ? ' · Vos' : '') + '</div></div>' +
+        '<div style="font-family:Cinzel,serif;font-size:13px;color:var(--green-bright);">' + (p.character_data ? (p.character_data.hpCurr || 0) + '/' + (p.character_data.hpMax || 10) + ' HP' : '') + '</div>' +
+      '</div>';
+    }).join('');
+  }
+}
+
+function leaveTableRoom() {
+  if (tableRoomPollInterval) { clearInterval(tableRoomPollInterval); tableRoomPollInterval = null; }
+  currentTableId = null;
+  showScreen('lobby');
+  loadTables();
+  loadPublicTables();
+}
+
+async function leaveTablePermanently() {
+  if (!currentTableId) return;
+  showConfirmDialog('¿Abandonar mesa?', 'Si abandonás la mesa, tendrás que pedir el código para volver a unirte.', 'Sí, abandonar', 'Cancelar', async function() {
+    try { await api('/tables/' + currentTableId + '/leave', { method: 'POST' }); showToast('Abandonaste la mesa'); } catch (err) {}
+    leaveTableRoom();
+  });
+}
+
+async function startCombatFromRoom() {
+  if (!currentTableId) return;
+  try {
+    await api('/tables/' + currentTableId + '/combat/start', { method: 'POST' });
+    showToast('¡Combate iniciado!');
+    const tableData = await api('/tables/' + currentTableId);
+    combatState.tableId = currentTableId;
+    combatState.tableName = tableData.table.name;
+    combatState.isOwner = true;
+    if (tableRoomPollInterval) { clearInterval(tableRoomPollInterval); tableRoomPollInterval = null; }
+    enterCombatView(tableData);
+  } catch (err) { showToast(err.message, true); }
+}
+
+function copyTableCode() {
+  const code = document.getElementById('tableRoomShareCode').textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(code).then(function() { showToast('Código copiado: ' + code); });
+  } else { showToast('Código: ' + code); }
 }
 
 async function startCombat(tableId) {
@@ -776,10 +923,45 @@ function renderSkills(){
   document.getElementById('passivePerc').textContent='Percepción Pasiva: '+(10+pb);
 }
 function renderAttacks(){
-  const el=document.getElementById('attacksList'); el.innerHTML='';
-  const inpStyle='background:#0a0805;border:1px solid var(--gold);border-radius:4px;color:var(--text);font-family:"Cinzel",serif;font-size:12px;padding:3px 5px;width:100%;outline:none;';
-  state.attacks.forEach((atk,i)=>{
-    el.innerHTML+=`<div class="attack-row ${state.editMode?'edit':'view'}"><div class="attack-name">${state.editMode?`<input value="${atk.name}" onchange="state.attacks[${i}].name=this.value" style="${inpStyle}">`:atk.name}</div><div class="attack-bonus" style="text-align:center;">${state.editMode?`<input value="${atk.bonus}" onchange="state.attacks[${i}].bonus=this.value" style="width:46px;text-align:center;${inpStyle}">`:atk.bonus}</div><div class="attack-dmg">${state.editMode?`<input value="${atk.dmg}" onchange="state.attacks[${i}].dmg=this.value" style="${inpStyle}">`:atk.dmg}</div>${state.editMode?`<button class="del-btn" onclick="delAttack(${i})">✕</button>`:''}</div>`;
+  const el = document.getElementById('attacksList');
+  el.innerHTML = '';
+  const inpStyle = 'background:var(--surface-dim,#111010);border:none;border-bottom:1px solid var(--primary-dim);color:var(--on-surface);font-family:Cinzel,serif;font-size:13px;padding:6px 8px;width:100%;outline:none;';
+
+  if (state.attacks.length === 0 && !state.editMode) {
+    el.innerHTML = '<div style="color:var(--on-surface-muted);font-style:italic;font-family:Crimson Text,serif;font-size:14px;padding:8px 0;">Sin armas equipadas.</div>';
+    return;
+  }
+
+  state.attacks.forEach(function(atk, i) {
+    const profBonus = state.profBonus || 2;
+    // Intentar mostrar el bonus con color
+    const bonusNum = parseInt(atk.bonus) || 0;
+    const bonusColor = bonusNum >= 0 ? 'var(--green-bright)' : 'var(--red-bright)';
+
+    if (state.editMode) {
+      el.innerHTML += '<div class="attack-row edit" style="background:var(--surface-container-low);padding:12px;margin-bottom:6px;border-left:3px solid var(--primary-dim);">' +
+        '<div style="grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+          '<span style="font-family:Manrope,sans-serif;font-size:9px;font-weight:600;color:var(--on-surface-muted);text-transform:uppercase;letter-spacing:2px;">Arma ' + (i+1) + '</span>' +
+          '<button class="del-btn" onclick="delAttack(' + i + ')" style="color:var(--red-bright);font-size:16px;">✕</button>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+          '<div><div style="font-family:Manrope,sans-serif;font-size:9px;color:var(--on-surface-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Nombre</div>' +
+          '<input value="' + (atk.name||'').replace(/"/g,'&quot;') + '" placeholder="Nombre del arma" onchange="state.attacks[' + i + '].name=this.value" style="' + inpStyle + '"></div>' +
+          '<div><div style="font-family:Manrope,sans-serif;font-size:9px;color:var(--on-surface-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Bonus ataque</div>' +
+          '<input value="' + (atk.bonus||'+0') + '" placeholder="+0" onchange="state.attacks[' + i + '].bonus=this.value" style="' + inpStyle + '"></div>' +
+          '<div><div style="font-family:Manrope,sans-serif;font-size:9px;color:var(--on-surface-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Daño</div>' +
+          '<input value="' + (atk.dmg||'1d6') + '" placeholder="1d6" onchange="state.attacks[' + i + '].dmg=this.value" style="' + inpStyle + '"></div>' +
+          '<div><div style="font-family:Manrope,sans-serif;font-size:9px;color:var(--on-surface-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Tipo daño</div>' +
+          '<input value="' + (atk.type||'') + '" placeholder="cortante, etc." onchange="state.attacks[' + i + '].type=this.value" style="' + inpStyle + '"></div>' +
+        '</div>' +
+      '</div>';
+    } else {
+      el.innerHTML += '<div class="attack-row view" style="border-left:3px solid var(--primary-dim);background:var(--surface-container-low);padding:12px;margin-bottom:4px;">' +
+        '<div class="attack-name">' + (atk.name || 'Sin nombre') + '</div>' +
+        '<div class="attack-bonus" style="color:' + bonusColor + ';text-align:center;">' + (atk.bonus || '+0') + '</div>' +
+        '<div class="attack-dmg">' + (atk.dmg || '—') + (atk.type ? ' <span style="font-size:10px;color:var(--on-surface-muted);">' + atk.type + '</span>' : '') + '</div>' +
+      '</div>';
+    }
   });
 }
 function renderInventory(){
@@ -898,7 +1080,7 @@ function renderEditableFields(){
     const val=textFields[key];
     if(state.editMode){
       const multi=el.classList.contains('text-block');
-      if(multi){ const ta=document.createElement('textarea'); ta.value=val; ta.className='ei'; ta.style.cssText+='resize:vertical;min-height:60px;'; ta.addEventListener('input',()=>{textFields[key]=ta.value;}); el.innerHTML=''; el.appendChild(ta); }
+      if(multi){ const ta=document.createElement('textarea'); ta.value=val; ta.className='ei'; ta.style.cssText+='resize:none;min-height:60px;overflow:hidden;'; ta.addEventListener('input',function(){textFields[key]=ta.value; ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px';}); el.innerHTML=''; el.appendChild(ta); setTimeout(function(){ ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; },0); }
       else{ const inp=document.createElement('input'); inp.value=val; inp.className='ei sm'; inp.addEventListener('input',()=>{ textFields[key]=inp.value; if(key==='charName')document.getElementById('headerName').textContent=inp.value.split('(')[0].trim(); }); el.innerHTML=''; el.appendChild(inp); }
     }else{
       el.textContent=val;
@@ -965,9 +1147,56 @@ function toggleSkillProf(key){
   }
   renderSkills();
 }
-function changeHP(dir){ const inp=document.getElementById('hpChange'); const amt=parseInt(inp.value)||0; if(amt<=0)return; state.hpCurr=Math.max(0,Math.min(state.hpMax,state.hpCurr+dir*amt)); inp.value=''; renderHP(); }
+function changeHP(dir){
+  const inp = document.getElementById('hpChange');
+  const amt = parseInt(inp.value) || 0;
+  if (amt <= 0) { showToast('Ingresá una cantidad válida', true); return; }
+  const prev = state.hpCurr;
+  if (dir === -1) {
+    // Daño: primero consume temporales
+    let dmg = amt;
+    if (state.hpTemp > 0) {
+      const absorbed = Math.min(state.hpTemp, dmg);
+      state.hpTemp -= absorbed;
+      dmg -= absorbed;
+    }
+    state.hpCurr = Math.max(0, state.hpCurr - dmg);
+  } else {
+    state.hpCurr = Math.min(state.hpMax, state.hpCurr + amt);
+  }
+  inp.value = '';
+  renderHP();
+  // Animación de número flotante
+  const diff = state.hpCurr - prev;
+  if (diff !== 0) showHPFloating(diff);
+  // Auto-guardado
+  if (currentCharId) saveCharacter();
+}
+
+function showHPFloating(diff) {
+  var el = document.createElement('div');
+  el.textContent = (diff > 0 ? '+' : '') + diff + ' HP';
+  el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);' +
+    'top:45%;font-family:Cinzel,serif;font-size:32px;font-weight:900;' +
+    'color:' + (diff > 0 ? 'var(--green-bright)' : 'var(--red-bright)') + ';' +
+    'text-shadow:0 0 20px ' + (diff > 0 ? 'rgba(90,175,114,0.5)' : 'rgba(217,79,79,0.5)') + ';' +
+    'pointer-events:none;z-index:9999;' +
+    'animation:hpFloat 1.4s ease-out forwards;';
+  document.body.appendChild(el);
+  setTimeout(function() { el.remove(); }, 1400);
+}
+
+// Agregar keyframe si no existe
+(function() {
+  if (!document.getElementById('hpFloatStyle')) {
+    var s = document.createElement('style');
+    s.id = 'hpFloatStyle';
+    s.textContent = '@keyframes hpFloat { 0%{opacity:1;transform:translateX(-50%) translateY(0);} 100%{opacity:0;transform:translateX(-50%) translateY(-60px);} }';
+    document.head.appendChild(s);
+  }
+})();
 function toggleSlot(lvl,idx){ const d=state.spells[lvl]; d.used=idx<d.used?idx:idx+1; renderSpells(); }
-function addAttack(){ state.attacks.push({name:'Nueva arma',bonus:'+0',dmg:'1d6'}); renderAttacks(); }
+function addAttack(){ state.attacks.push({name:'Nueva arma',bonus:'+0',dmg:'1d6',type:''}); renderAttacks(); }
 function delAttack(i){ state.attacks.splice(i,1); renderAttacks(); }
 function addInvItem(){ state.inventory.push('Nuevo objeto'); renderInventory(); }
 function delInvItem(i){ state.inventory.splice(i,1); renderInventory(); }
@@ -1805,12 +2034,14 @@ function onRaceChanged(raceName) {
     });
     subraceEl.innerHTML = '';
     subraceEl.appendChild(sel);
+    // Aplicar bonuses de la subraza actual o raza base
+    applyRacialBonuses(raceName, currentSub);
   } else if (subraces.length > 0 && textFields['subrace']) {
     container.style.display = 'block';
     subraceEl.textContent = textFields['subrace'];
   } else {
     container.style.display = 'none';
-    // Apply base race bonus if no subraces
+    // Razas sin subrazas: aplicar bonus directo
     applyRacialBonuses(raceName, '');
   }
 
@@ -1820,26 +2051,26 @@ function onRaceChanged(raceName) {
 function applyRacialBonuses(raceName, subraceName) {
   if (typeof RACIAL_BONUSES === 'undefined') return;
 
-  // Reset stats to base 10 first (so we don't stack bonuses)
-  // Only reset if explicitly changing race
+  // Reset stats to base 10
   state.stats = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
 
-  // Apply subrace bonus if available (includes base race bonus)
-  var key = subraceName || raceName;
+  // Si hay subraza, usar esa key (ya incluye bonuses de raza base)
+  // Si no hay subraza, usar la raza base
+  var key = (subraceName && subraceName.length > 0) ? subraceName : raceName;
   var bonuses = RACIAL_BONUSES[key];
+
+  // Fallback: si no encontramos la subraza, intentar con la raza base
   if (!bonuses && subraceName) {
-    // Try base race
     bonuses = RACIAL_BONUSES[raceName];
   }
 
   if (bonuses) {
     Object.keys(bonuses).forEach(function(stat) {
-      state.stats[stat] = (state.stats[stat] || 10) + bonuses[stat];
+      state.stats[stat] = 10 + bonuses[stat];
     });
-    // Build description
     var statNames = {str:'FUE',dex:'DES',con:'CON',int:'INT',wis:'SAB',cha:'CAR'};
     var desc = Object.keys(bonuses).map(function(s) { return statNames[s] + ' +' + bonuses[s]; }).join(', ');
-    showToast('Bonificaciones raciales aplicadas: ' + desc);
+    showToast('Bonificaciones aplicadas: ' + desc);
   }
 
   renderAll();
@@ -2064,4 +2295,234 @@ renderEncClasses = function(container) {
       openClassFullView(name);
     });
   });
+};
+
+// ══════════════════════════════════════
+//  COMBAT SPELL LIST SYSTEM
+// ══════════════════════════════════════
+var combatSpellFilter = 'all'; // 'all', 0, 1, 2, ... 9
+var combatSelectedSpell = null;
+
+function getMySpellAtk() {
+  var prof = state.profBonus || 2;
+  var key = state.spellAbilityKey || 'int';
+  var statVal = state.stats[key] || 10;
+  var mod = Math.floor((statVal - 10) / 2);
+  return prof + mod;
+}
+
+function getAvailableSpells() {
+  if (typeof SPELLS_DATA === 'undefined' || typeof CLASS_PROGRESSION === 'undefined') return [];
+  var className = textFields['class'] || '';
+  var level = parseInt(textFields['level']) || 1;
+  var raceName = textFields['race'] || '';
+  var subraceName = textFields['subrace'] || '';
+  if (!className) return [];
+
+  // Get class spell data
+  var cls = CLASS_PROGRESSION.find(function(c) { return c.name === className; });
+  if (!cls || !cls.spellcaster) return [];
+
+  // Determine max spell level
+  var maxSpellLevel = 0;
+  if (cls.caster_type === 'full') {
+    maxSpellLevel = Math.min(9, Math.ceil(level / 2));
+  } else if (cls.caster_type === 'half') {
+    maxSpellLevel = level >= 2 ? Math.min(5, Math.ceil((level - 1) / 2)) : 0;
+  } else if (cls.caster_type === 'warlock') {
+    maxSpellLevel = Math.min(5, Math.ceil(level / 2));
+  }
+  // Correct max level: check actual slot table
+  if (cls.spell_slots) {
+    var slots = cls.spell_slots[level];
+    if (Array.isArray(slots)) {
+      for (var si = slots.length - 1; si >= 0; si--) {
+        if (slots[si] > 0) { maxSpellLevel = si + 1; break; }
+      }
+    } else if (slots && slots.level) {
+      maxSpellLevel = slots.level;
+    }
+  }
+
+  // Get cantrips count
+  var cantripsCount = 0;
+  if (cls.cantrips_by_level && cls.cantrips_by_level[String(level)]) {
+    cantripsCount = cls.cantrips_by_level[String(level)];
+  }
+
+  // Filter spells by class
+  var classSpells = SPELLS_DATA.filter(function(s) {
+    return s.classes.indexOf(className) !== -1 && s.level <= maxSpellLevel;
+  });
+
+  // Add racial spells
+  if (typeof RACIAL_SPELLS !== 'undefined') {
+    var raceKey = subraceName || raceName;
+    var racialData = RACIAL_SPELLS[raceKey];
+    if (!racialData && subraceName) racialData = RACIAL_SPELLS[raceName];
+    if (racialData) {
+      Object.keys(racialData).forEach(function(reqLevel) {
+        if (level >= parseInt(reqLevel)) {
+          racialData[reqLevel].forEach(function(spellName) {
+            if (spellName.startsWith('_')) return; // placeholder
+            var found = SPELLS_DATA.find(function(s) { return s.name === spellName; });
+            if (found && !classSpells.find(function(cs) { return cs.name === found.name; })) {
+              classSpells.push(Object.assign({}, found, { racial: true }));
+            }
+          });
+        }
+      });
+    }
+  }
+
+  // Sort by level then name
+  classSpells.sort(function(a, b) {
+    return a.level !== b.level ? a.level - b.level : a.name.localeCompare(b.name);
+  });
+
+  return classSpells;
+}
+
+function renderCombatSpellPanel() {
+  var className = textFields['class'] || '';
+  var level = parseInt(textFields['level']) || 1;
+  var cls = null;
+  if (typeof CLASS_PROGRESSION !== 'undefined') {
+    cls = CLASS_PROGRESSION.find(function(c) { return c.name === className; });
+  }
+
+  // DC and Attack bonus
+  var dcEl = document.getElementById('spellDCDisplay');
+  var atkEl = document.getElementById('spellAtkDisplay');
+  if (dcEl) dcEl.textContent = getMySpellDC();
+  if (atkEl) atkEl.textContent = '+' + getMySpellAtk();
+
+  // Level filter buttons
+  var filterEl = document.getElementById('combatSpellLevelFilter');
+  if (filterEl) {
+    var allSpells = getAvailableSpells();
+    var levelsAvailable = [];
+    allSpells.forEach(function(s) {
+      if (levelsAvailable.indexOf(s.level) === -1) levelsAvailable.push(s.level);
+    });
+    var html = '<button class="adv-btn' + (combatSpellFilter === 'all' ? ' adv-active' : '') + '" onclick="setCombatSpellFilter(\'all\')" style="font-size:9px;padding:5px 8px;">Todos</button>';
+    levelsAvailable.forEach(function(lvl) {
+      var label = lvl === 0 ? 'Trucos' : 'Nv' + lvl;
+      html += '<button class="adv-btn' + (combatSpellFilter === lvl ? ' adv-active' : '') + '" onclick="setCombatSpellFilter(' + lvl + ')" style="font-size:9px;padding:5px 8px;">' + label + '</button>';
+    });
+    filterEl.innerHTML = html;
+  }
+
+  // Spell slots display
+  var slotsEl = document.getElementById('combatSpellSlots');
+  if (slotsEl && cls && cls.spell_slots) {
+    var slotsData = cls.spell_slots[level];
+    var html = '';
+    if (cls.caster_type === 'warlock' && slotsData) {
+      html = '<div style="font-family:Manrope,sans-serif;font-size:10px;color:var(--on-surface-muted);">Espacios: ' + slotsData.slots + ' de nivel ' + slotsData.level + ' (descanso corto)</div>';
+    } else if (Array.isArray(slotsData)) {
+      html = '<div style="display:flex;gap:3px;flex-wrap:wrap;">';
+      for (var i = 0; i < slotsData.length; i++) {
+        if (slotsData[i] > 0) {
+          // Check used slots from state.spells
+          var used = (state.spells[i + 1] && state.spells[i + 1].used) || 0;
+          var total = slotsData[i];
+          html += '<div style="font-family:Manrope,sans-serif;font-size:9px;padding:3px 6px;background:var(--surface-container-low);color:' + (used >= total ? 'var(--red-bright)' : 'var(--on-surface)') + ';">Nv' + (i + 1) + ': ' + (total - used) + '/' + total + '</div>';
+        }
+      }
+      html += '</div>';
+    }
+    if (cls.cantrips_by_level) {
+      var ct = cls.cantrips_by_level[String(level)] || 0;
+      html = '<div style="font-family:Manrope,sans-serif;font-size:10px;color:var(--tertiary);margin-bottom:4px;">Trucos conocidos: ' + ct + '</div>' + html;
+    }
+    slotsEl.innerHTML = html;
+  } else if (slotsEl) {
+    slotsEl.innerHTML = '<div style="font-family:Manrope,sans-serif;font-size:10px;color:var(--on-surface-muted);font-style:italic;">Esta clase no lanza conjuros</div>';
+  }
+
+  // Spell list
+  var listEl = document.getElementById('combatSpellList');
+  if (listEl) {
+    var spells = getAvailableSpells();
+    if (combatSpellFilter !== 'all') {
+      spells = spells.filter(function(s) { return s.level === combatSpellFilter; });
+    }
+
+    if (spells.length === 0) {
+      listEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--on-surface-muted);font-style:italic;">No hay conjuros disponibles</div>';
+    } else {
+      listEl.innerHTML = spells.map(function(s) {
+        var isSelected = combatSelectedSpell && combatSelectedSpell.name === s.name;
+        var levelLabel = s.level === 0 ? 'Truco' : 'Nv' + s.level;
+        var racialTag = s.racial ? ' <span style="color:var(--tertiary);font-size:8px;">[RACIAL]</span>' : '';
+        var ritualTag = s.ritual ? ' <span style="color:var(--tertiary);font-size:8px;">[R]</span>' : '';
+        return '<div class="combat-spell-item' + (isSelected ? ' selected' : '') + '" onclick="selectCombatSpell(\'' + s.name.replace(/'/g, "\\'") + '\')">' +
+          '<div class="combat-spell-item-top">' +
+            '<span class="combat-spell-item-name">' + s.name + racialTag + ritualTag + '</span>' +
+            '<span class="combat-spell-item-level">' + levelLabel + '</span>' +
+          '</div>' +
+          (isSelected ? '<div class="combat-spell-item-desc">' +
+            '<div style="font-size:11px;color:var(--on-surface-muted);">' + s.school + ' · ' + (s.casting_time || '1 acción') + ' · ' + (s.range || '—') + '</div>' +
+            '<div style="font-size:12px;margin-top:4px;">' + (s.description || '').substring(0, 200) + '...</div>' +
+            '<button class="add-btn" onclick="event.stopPropagation();useCombatSpell()" style="margin-top:6px;text-align:center;">✦ Usar este conjuro</button>' +
+          '</div>' : '') +
+        '</div>';
+      }).join('');
+    }
+  }
+}
+
+function setCombatSpellFilter(filter) {
+  combatSpellFilter = filter;
+  renderCombatSpellPanel();
+}
+
+function selectCombatSpell(name) {
+  if (combatSelectedSpell && combatSelectedSpell.name === name) {
+    combatSelectedSpell = null;
+  } else {
+    combatSelectedSpell = SPELLS_DATA.find(function(s) { return s.name === name; });
+  }
+  renderCombatSpellPanel();
+}
+
+function useCombatSpell() {
+  if (!combatSelectedSpell) return;
+  // Show resolve panel
+  var resolveEl = document.getElementById('combatSpellResolve');
+  var nameEl = document.getElementById('combatSpellResolveName');
+  var infoEl = document.getElementById('combatSpellResolveInfo');
+  if (resolveEl) resolveEl.style.display = 'block';
+  if (nameEl) nameEl.textContent = combatSelectedSpell.name;
+  if (infoEl) infoEl.textContent = combatSelectedSpell.school + ' · ' + (combatSelectedSpell.level === 0 ? 'Truco' : 'Nivel ' + combatSelectedSpell.level) + ' · ' + (combatSelectedSpell.duration || 'Instantáneo');
+
+  // Use a slot if not a cantrip
+  if (combatSelectedSpell.level > 0) {
+    var slotLevel = combatSelectedSpell.level;
+    if (state.spells[slotLevel]) {
+      state.spells[slotLevel].used = Math.min((state.spells[slotLevel].used || 0) + 1, state.spells[slotLevel].slots || 99);
+    }
+    renderCombatSpellPanel();
+  }
+
+  // Reset save state
+  spellSaveStat = null;
+  spellSaveOnSuccess = 'none';
+  renderSpellStatBtns();
+  updateSpellSaveBtn();
+  setSpellSaveOnSuccess('none');
+}
+
+// Override setCombatMode to render spell panel
+var _origSetCombatMode = setCombatMode;
+setCombatMode = function(mode) {
+  _origSetCombatMode(mode);
+  if (mode === 'spell') {
+    combatSelectedSpell = null;
+    combatSpellFilter = 'all';
+    var resolveEl = document.getElementById('combatSpellResolve');
+    if (resolveEl) resolveEl.style.display = 'none';
+    renderCombatSpellPanel();
+  }
 };
