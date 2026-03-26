@@ -2284,13 +2284,23 @@ function renderClassFullViewHTML(className) {
     cls.progression.forEach(function(p) {
       if (p.features.length === 0) return;
       var featsHTML = p.features.map(function(f) {
-        // Check if we have detail for this feature
+        // Check if we have detail: try exact match, then without parentheses
         var detail = null;
-        if (cls.features_detail && cls.features_detail[f]) {
-          detail = cls.features_detail[f];
+        var detailKey = f;
+        if (cls.features_detail) {
+          if (cls.features_detail[f]) {
+            detail = cls.features_detail[f];
+          } else {
+            // Try without parentheses: "Inspiración de Bardo (d6)" → "Inspiración de Bardo"
+            var baseName = f.replace(/\s*\(.*?\)\s*$/, '').trim();
+            if (cls.features_detail[baseName]) {
+              detail = cls.features_detail[baseName];
+              detailKey = baseName;
+            }
+          }
         }
         if (detail) {
-          var key = className + ':prog:' + f;
+          var key = className + ':prog:' + detailKey + ':' + p.level;
           var expanded = encExpandedFeature === key;
           return '<div class="enc-tag enc-tag-clickable" onclick="event.stopPropagation();toggleEncFeature(\'' + key.replace(/'/g,"\\'") + '\')">' + f + (expanded ? ' ▾' : ' ▸') + '</div>' +
             (expanded ? '<div class="enc-feature-desc">' + detail + '</div>' : '');
