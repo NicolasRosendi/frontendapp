@@ -1132,9 +1132,12 @@ function renderHP(){
 
 let textFields={};
 function renderEditableFields(){
+  var customFields = ['class','level','race','subrace','subclass','pactBoon'];
   document.querySelectorAll('#appWrapper [data-field]').forEach(el=>{
     if(el.tagName==='INPUT'||el.tagName==='TEXTAREA')return;
     const key=el.getAttribute('data-field');
+    // Skip fields managed by custom selectors
+    if(customFields.indexOf(key) !== -1) return;
     if(!textFields[key])textFields[key]=el.textContent.trim();
     const val=textFields[key];
     if(state.editMode){
@@ -2099,6 +2102,57 @@ function renderClassRaceSelectors() {
   renderSubclassSelector();
   // Pact boon selector (Brujo only)
   renderPactBoonSelector();
+  // Subrace selector
+  renderSubraceSelector();
+}
+
+function renderSubraceSelector() {
+  var container = document.getElementById('subraceFieldContainer');
+  var subraceEl = document.getElementById('subraceField');
+  if (!container || !subraceEl) return;
+
+  var raceName = textFields['race'] || '';
+  if (!raceName) { container.style.display = 'none'; return; }
+
+  var raceData = null;
+  if (typeof ENCYCLOPEDIA_DATA !== 'undefined' && ENCYCLOPEDIA_DATA.races) {
+    raceData = ENCYCLOPEDIA_DATA.races.find(function(r) { return r.name === raceName; });
+  }
+
+  var subraces = [];
+  if (raceData && typeof raceData.subraces === 'object' && !Array.isArray(raceData.subraces)) {
+    subraces = Object.keys(raceData.subraces);
+  }
+
+  if (subraces.length === 0) { container.style.display = 'none'; return; }
+
+  container.style.display = 'block';
+
+  if (state.editMode) {
+    var currentSub = textFields['subrace'] || '';
+    // Only rebuild if not already a select
+    if (subraceEl.tagName !== 'SELECT' && !subraceEl.querySelector('select')) {
+      var sel = document.createElement('select');
+      sel.style.cssText = 'width:100%;background:var(--surface-dim);border:none;border-bottom:1px solid var(--primary-dim);color:var(--on-surface);font-family:Cinzel,serif;font-size:12px;padding:4px;outline:none;';
+      var opt0 = document.createElement('option');
+      opt0.value = ''; opt0.textContent = '— Elegir subraza —';
+      sel.appendChild(opt0);
+      subraces.forEach(function(sn) {
+        var opt = document.createElement('option');
+        opt.value = sn; opt.textContent = sn;
+        if (sn === currentSub) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', function() {
+        textFields['subrace'] = sel.value;
+        applyRacialBonuses(raceName, sel.value);
+      });
+      subraceEl.innerHTML = '';
+      subraceEl.appendChild(sel);
+    }
+  } else {
+    subraceEl.textContent = textFields['subrace'] || '—';
+  }
 }
 
 function renderSubclassSelector() {
@@ -2248,53 +2302,10 @@ function autoConfigureSpellSlots(className, level) {
 }
 
 function onRaceChanged(raceName) {
-  var container = document.getElementById('subraceFieldContainer');
-  var subraceEl = document.getElementById('subraceField');
-  if (!container || !subraceEl) return;
-
-  var raceData = null;
-  if (ENCYCLOPEDIA_DATA && ENCYCLOPEDIA_DATA.races) {
-    raceData = ENCYCLOPEDIA_DATA.races.find(function(r) { return r.name === raceName; });
-  }
-
-  var subraces = [];
-  if (raceData && typeof raceData.subraces === 'object' && !Array.isArray(raceData.subraces)) {
-    subraces = Object.keys(raceData.subraces);
-  }
-
-  if (subraces.length > 0 && state.editMode) {
-    container.style.display = 'block';
-    var currentSub = textFields['subrace'] || '';
-    var sel = document.createElement('select');
-    sel.className = 'ei sm';
-    sel.style.cssText = 'width:100%;background:var(--surface-dim);border:none;border-bottom:1px solid var(--primary-dim);color:var(--on-surface);font-family:Cinzel,serif;font-size:13px;padding:4px;outline:none;';
-    var opt0 = document.createElement('option');
-    opt0.value = ''; opt0.textContent = '— Elegir subraza —';
-    sel.appendChild(opt0);
-    subraces.forEach(function(sn) {
-      var opt = document.createElement('option');
-      opt.value = sn; opt.textContent = sn;
-      if (sn === currentSub) opt.selected = true;
-      sel.appendChild(opt);
-    });
-    sel.addEventListener('change', function() {
-      textFields['subrace'] = sel.value;
-      applyRacialBonuses(raceName, sel.value);
-    });
-    subraceEl.innerHTML = '';
-    subraceEl.appendChild(sel);
-    // Aplicar bonuses de la subraza actual o raza base
-    applyRacialBonuses(raceName, currentSub);
-  } else if (subraces.length > 0 && textFields['subrace']) {
-    container.style.display = 'block';
-    subraceEl.textContent = textFields['subrace'];
-  } else {
-    container.style.display = 'none';
-    // Razas sin subrazas: aplicar bonus directo
-    applyRacialBonuses(raceName, '');
-  }
-
-  showToast('Raza: ' + raceName);
+  // Reset subrace when race changes
+  textFields['subrace'] = '';
+  // Apply racial bonuses (base race, no subrace yet)
+  applyRacialBonuses(raceName, '');
 }
 
 function applyRacialBonuses(raceName, subraceName) {
