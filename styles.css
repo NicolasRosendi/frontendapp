@@ -136,7 +136,7 @@ body::after {
   min-height: 100vh;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  padding: 24px;
+  padding: 64px 24px 24px;
   background:
     radial-gradient(ellipse at 50% 20%, var(--glow-gold) 0%, transparent 50%),
     var(--surface);
@@ -247,7 +247,7 @@ body::after {
 
 .lobby-header {
   background: var(--surface-container-low);
-  padding: 14px 20px;
+  padding: 42px 20px 14px 20px;
   display: flex; align-items: center; justify-content: space-between;
   border-bottom: 2px solid var(--primary-dim);
 }
@@ -392,7 +392,7 @@ body::after {
 .combat-header {
   background: var(--surface-container-low);
   border-bottom: 2px solid var(--red);
-  padding: 12px 20px;
+  padding: 42px 20px 12px;
   display: flex; align-items: center; justify-content: space-between;
 }
 .combat-title-bar {
@@ -581,7 +581,7 @@ body::after {
 .app-header {
   background: var(--surface-container-low);
   border-bottom: 2px solid var(--primary-dim);
-  padding: 14px 20px 0;
+  padding: 42px 20px 0;
   position: sticky; top: 0; z-index: 100;
 }
 .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -770,7 +770,8 @@ body::after {
   overflow: hidden; margin-bottom: 8px;
 }
 .hp-bar-fill { height: 100%; transition: width .4s ease, background .4s; }
-.hp-input-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.hp-input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: center; margin-top: 8px; }
+.hp-num-input { grid-column: 1 / -1; }
 .hp-num-input {
   flex: 1;
   background: var(--surface-container-low);
@@ -982,6 +983,9 @@ body::after {
   font-size: 15px; color: var(--on-surface);
   line-height: 1.6; min-height: 60px;
   white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  overflow: hidden;
 }
 .text-label {
   font-family: 'Manrope', sans-serif;
@@ -1094,10 +1098,19 @@ body::after {
   font-size: 15px;
   padding: 6px 8px;
   width: 100%; outline: none;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 .ei:focus { border-bottom-color: var(--tertiary); }
 .ei.sm { font-family: 'Cinzel', serif; font-size: 13px; }
-textarea.ei { resize: vertical; min-height: 60px; }
+textarea.ei {
+  resize: none;
+  min-height: 60px;
+  overflow: hidden;
+  line-height: 1.6;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
 
 /* ══════════════════════════════════════
    DICE TAB
@@ -1563,4 +1576,49 @@ textarea.ei { resize: vertical; min-height: 60px; }
   .join-row, .create-row { flex-direction: column; }
   .join-row .char-action-btn,
   .create-row .char-action-btn { width: 100%; text-align: center; padding: 12px; }
+}
+
+/* Combat spell list items */
+.combat-spell-item {
+  padding: 8px 10px;
+  margin-bottom: 2px;
+  background: var(--surface-container-low);
+  cursor: pointer;
+  transition: all .15s;
+  border-left: 3px solid transparent;
+}
+.combat-spell-item:hover { background: var(--surface-container-high); }
+.combat-spell-item.selected {
+  background: var(--surface-container-high);
+  border-left-color: var(--primary);
+}
+.combat-spell-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.combat-spell-item-name {
+  font-family: 'Cinzel', serif;
+  font-size: 12px; font-weight: 600;
+  color: var(--on-surface);
+}
+.combat-spell-item-level {
+  font-family: 'Manrope', sans-serif;
+  font-size: 9px; font-weight: 600;
+  color: var(--on-surface-muted);
+  flex-shrink: 0;
+  padding: 2px 6px;
+  background: var(--surface-container);
+}
+.combat-spell-item-desc {
+  margin-top: 6px;
+  padding-top: 6px;
+  font-family: 'Crimson Text', serif;
+  font-size: 13px;
+  color: var(--on-surface-dim);
+  line-height: 1.4;
+  background-image: linear-gradient(90deg, var(--outline-variant), transparent);
+  background-size: 100% 1px;
+  background-position: top;
+  background-repeat: no-repeat;
 }
