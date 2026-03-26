@@ -1006,6 +1006,9 @@ function renderSpells(){
   var className = textFields['class'] || '';
   var charLevel = parseInt(textFields['level']) || 1;
 
+  // Always auto-configure spell slots from class data
+  if(className) autoConfigureSpellSlots(className, charLevel);
+
   // Auto-detect max spell level for the class
   var maxLvlToShow = 2;
   if(className && typeof CLASS_PROGRESSION !== 'undefined'){
