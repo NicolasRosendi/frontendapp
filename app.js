@@ -1001,82 +1001,98 @@ function renderSpellMeta(){
   }
 }
 function renderSpells(){
-  const el=document.getElementById('spellLevels'); if(!el)return; el.innerHTML=''; renderSpellMeta();
-  const lnames=['Trucos','Nivel 1','Nivel 2','Nivel 3','Nivel 4','Nivel 5','Nivel 6','Nivel 7','Nivel 8','Nivel 9'];
-  const inpStyle='flex:1;background:var(--surface-dim,#111010);border:none;border-bottom:1px solid var(--tertiary-container,#4c2a8c);color:var(--on-surface,#e8e1dd);font-family:Crimson Text,serif;font-size:15px;padding:4px 6px;outline:none;';
-  const slotInpStyle='width:34px;text-align:center;background:var(--surface-dim,#111010);border:none;border-bottom:1px solid var(--tertiary-container,#4c2a8c);color:var(--on-surface,#e8e1dd);font-size:12px;padding:2px;outline:none;';
+  var el=document.getElementById('spellLevels'); if(!el)return; el.innerHTML=''; renderSpellMeta();
+  var lnames=['Trucos','Nivel 1','Nivel 2','Nivel 3','Nivel 4','Nivel 5','Nivel 6','Nivel 7','Nivel 8','Nivel 9'];
+  var className = textFields['class'] || '';
+  var charLevel = parseInt(textFields['level']) || 1;
 
-  for(let lvl=0;lvl<=9;lvl++){
-    // Asegurar que el nivel existe
-    if(!state.spells[lvl]){
-      state.spells[lvl] = {slots:0, used:0, list:[], prep:[]};
+  // Auto-detect max spell level for the class
+  var maxLvlToShow = 2;
+  if(className && typeof CLASS_PROGRESSION !== 'undefined'){
+    var cls = CLASS_PROGRESSION.find(function(c){return c.name===className;});
+    if(cls && cls.spell_slots && cls.spell_slots[charLevel]){
+      var sd = cls.spell_slots[charLevel];
+      if(Array.isArray(sd)){
+        for(var si=sd.length-1;si>=0;si--){ if(sd[si]>0){maxLvlToShow=si+1;break;} }
+      } else if(sd.level){ maxLvlToShow = sd.level; }
     }
-    const d = state.spells[lvl];
+  }
+
+  for(var lvl=0;lvl<=9;lvl++){
+    if(!state.spells[lvl]) state.spells[lvl] = {slots:0, used:0, list:[], prep:[]};
+    var d = state.spells[lvl];
     if(!d.list) d.list = [];
-    if(!d.prep) d.prep = d.list.map(()=>false);
-    // Sync prep length with list
+    if(!d.prep) d.prep = d.list.map(function(){return false;});
     while(d.prep.length < d.list.length) d.prep.push(false);
 
-    // En modo vista: ocultar niveles vacíos (3+) sin slots
-    const hasContent = d.list.some(s=>s && s.trim());
-    if(!state.editMode && lvl > 2 && !hasContent && d.slots === 0) continue;
+    var hasContent = d.list.some(function(s){return s && s.trim();});
+    if(!hasContent && d.slots === 0 && lvl > maxLvlToShow && !state.editMode) continue;
+    if(!hasContent && d.slots === 0 && lvl > Math.max(maxLvlToShow, 2) && state.editMode) continue;
 
-    // Slots de nivel (bolitas gastables)
-    let slotsHTML = '';
+    // Slots (bolitas gastables)
+    var slotsHTML = '';
     if(lvl > 0 && d.slots > 0){
-      let dots = '';
-      for(let i=0;i<d.slots;i++){
+      var dots = '';
+      for(var i=0;i<d.slots;i++){
         dots += '<div class="spell-slot '+(i<d.used?'used':'')+'" onclick="toggleSlot('+lvl+','+i+')"></div>';
       }
-      slotsHTML = '<div class="spell-slots-row">'+dots+'<span class="spell-slots-label">'+d.used+'/'+d.slots+'</span></div>';
+      slotsHTML = '<div class="spell-slots-row">'+dots+'<span class="spell-slots-label">'+(d.slots-d.used)+'/'+d.slots+'</span></div>';
     }
 
-    // Slot count editor (solo en edit mode, solo niveles 1+)
-    let slotEditor = '';
-    if(state.editMode && lvl > 0){
-      slotEditor = '<input type="number" min="0" max="9" value="'+d.slots+'" onchange="state.spells['+lvl+'].slots=+this.value;renderSpells()" style="'+slotInpStyle+'">';
-    }
-
-    // Lista de conjuros
-    let listHTML = '';
+    // Lista de conjuros agregados
+    var listHTML = '';
     d.list.forEach(function(sp, i){
-      // En modo vista, no mostrar vacíos
       if(!state.editMode && (!sp || !sp.trim())) return;
-      const isPrepared = d.prep[i] || false;
-      let entry = '<div class="spell-entry">';
-      // Dot de preparado (TODOS los niveles, incluido trucos)
-      entry += '<div class="spell-dot '+(isPrepared?'prepared':'')+'" onclick="togglePrepared('+lvl+','+i+')" title="'+(isPrepared?'Preparado':'Sin preparar')+'"></div>';
+      if(!sp || !sp.trim()) return;
+      var isPrepared = d.prep[i] || false;
+      listHTML += '<div class="spell-entry">';
+      listHTML += '<div class="spell-dot '+(isPrepared?'prepared':'')+'" onclick="togglePrepared('+lvl+','+i+')" title="'+(isPrepared?'Preparado':'Sin preparar')+'"></div>';
+      listHTML += '<span class="spell-name" style="flex:1;">'+sp+'</span>';
       if(state.editMode){
-        entry += '<span class="spell-name" style="flex:1;">' + (sp || '<em style="color:var(--on-surface-muted);">Vacío</em>') + '</span>';
-        entry += '<button class="del-btn" onclick="removeSpell('+lvl+','+i+')" style="margin-left:4px;">✕</button>';
-      } else {
-        entry += '<span class="spell-name">'+sp+'</span>';
+        listHTML += '<button class="del-btn" onclick="removeSpell('+lvl+','+i+')" style="margin-left:4px;">\u2715</button>';
       }
-      entry += '</div>';
-      listHTML += entry;
+      listHTML += '</div>';
     });
 
-    // Si no hay nada y no estamos editando
     if(!listHTML && !state.editMode){
-      listHTML = '<span style="color:var(--on-surface-muted,#7a6f63);font-size:13px;font-style:italic;">Sin conjuros</span>';
+      listHTML = '<span style="color:var(--on-surface-muted);font-size:13px;font-style:italic;">Sin conjuros</span>';
     }
 
-    // Botón agregar (siempre en edit mode)
-    let addBtn = '';
+    // Selector dropdown para agregar (en edit mode)
+    var addHTML = '';
     if(state.editMode){
-      addBtn = '<button class="add-btn" onclick="addSpell('+lvl+')" style="margin-top:4px;">+ Agregar '+(lvl===0?'truco':'conjuro')+'</button>';
+      var available = getSpellsForClassLevel(className, lvl);
+      var currentNames = d.list.map(function(s){return (s||'').toLowerCase().trim();});
+      available = available.filter(function(s){return currentNames.indexOf(s.name.toLowerCase().trim()) === -1;});
+
+      if(available.length > 0){
+        addHTML = '<div style="margin-top:6px;">';
+        addHTML += '<select id="spellAdd'+lvl+'" style="width:100%;padding:8px;background:var(--surface-container-low);border:none;border-bottom:1px solid var(--primary-dim);color:var(--on-surface);font-family:Crimson Text,serif;font-size:14px;outline:none;appearance:auto;">';
+        addHTML += '<option value="">\u2014 Elegir '+(lvl===0?'truco':'conjuro de nv'+lvl)+' \u2014</option>';
+        available.forEach(function(s){
+          var tag = s.ritual ? ' [R]' : '';
+          if(s.racial) tag += ' [Racial]';
+          addHTML += '<option value="'+s.name.replace(/"/g,'&quot;')+'">'+s.name+' ('+s.school+')'+tag+'</option>';
+        });
+        addHTML += '</select>';
+        addHTML += '<button class="add-btn" onclick="addSpellFromSelect('+lvl+')" style="margin-top:4px;width:100%;text-align:center;">+ Agregar '+(lvl===0?'truco':'conjuro')+'</button>';
+        addHTML += '</div>';
+      } else if(!className){
+        addHTML = '<div style="margin-top:6px;font-family:Manrope,sans-serif;font-size:10px;color:var(--on-surface-muted);font-style:italic;">Elegi una clase para ver conjuros</div>';
+      }
     }
 
     el.innerHTML += '<div class="spell-level-block">' +
       '<div class="spell-level-header">' +
         '<span class="spell-level-num">'+lvl+'</span>' +
         '<span class="spell-level-title">'+lnames[lvl]+'</span>' +
-        slotsHTML + slotEditor +
+        slotsHTML +
       '</div>' +
-      '<div class="spell-list">' + listHTML + addBtn + '</div>' +
+      '<div class="spell-list">' + listHTML + addHTML + '</div>' +
     '</div>';
   }
 }
+
 function renderHP(){
   const hpCurrEl=document.getElementById('hpCurr');
   const hpMaxEl=document.getElementById('hpMax');
@@ -1225,28 +1241,22 @@ function delAttack(i){ state.attacks.splice(i,1); renderAttacks(); }
 function addInvItem(){ state.inventory.push('Nuevo objeto'); renderInventory(); }
 function delInvItem(i){ state.inventory.splice(i,1); renderInventory(); }
 function togglePrepared(lvl,idx){ if(!state.spells[lvl].prep) state.spells[lvl].prep=state.spells[lvl].list.map(()=>false); state.spells[lvl].prep[idx]=!state.spells[lvl].prep[idx]; renderSpells(); }
-function addSpell(lvl){
-  if(!state.spells[lvl]) return;
-  // Obtener hechizos disponibles para este nivel y clase
-  var className = textFields['class'] || '';
-  var available = getSpellsForClassLevel(className, lvl);
-  // Filtrar los que ya tiene el personaje
-  var current = state.spells[lvl].list.map(function(s){return s.toLowerCase().trim();});
-  available = available.filter(function(s){ return current.indexOf(s.name.toLowerCase().trim()) === -1; });
+function addSpellFromSelect(lvl){
+  var sel = document.getElementById('spellAdd'+lvl);
+  if(!sel || !sel.value) { showToast('Seleccioná un conjuro de la lista', true); return; }
+  var name = sel.value;
+  if(!state.spells[lvl]) state.spells[lvl] = {slots:0, used:0, list:[], prep:[]};
+  state.spells[lvl].list.push(name);
+  state.spells[lvl].prep.push(false);
+  renderSpells();
+  showToast((lvl===0?'Truco':'Conjuro') + ' agregado: ' + name);
+}
 
-  if(available.length === 0 && className){
-    showToast('No hay más ' + (lvl===0?'trucos':'conjuros de nivel '+lvl) + ' disponibles para ' + className, true);
-    return;
-  }
-  if(!className){
-    // Sin clase, agregar input libre
-    state.spells[lvl].list.push('');
-    state.spells[lvl].prep.push(false);
-    renderSpells();
-    return;
-  }
-  // Mostrar modal de selección
-  showSpellPicker(lvl, available);
+function removeSpell(lvl,idx){
+  if(!state.spells[lvl]) return;
+  state.spells[lvl].list.splice(idx,1);
+  state.spells[lvl].prep.splice(idx,1);
+  renderSpells();
 }
 
 function getSpellsForClassLevel(className, lvl){
@@ -1280,77 +1290,10 @@ function getSpellsForClassLevel(className, lvl){
   return spells;
 }
 
-function showSpellPicker(lvl, spells){
-  var overlay = document.getElementById('modalOverlay');
-  var titleEl = document.getElementById('modalTitle');
-  var bodyEl = document.getElementById('modalBody');
-  var inputWrap = document.getElementById('modalInputWrap');
-  var actionsEl = document.getElementById('modalActions');
-  if(!overlay) return;
 
-  titleEl.textContent = lvl === 0 ? 'Elegir Truco' : 'Elegir Conjuro de Nivel ' + lvl;
 
-  // Search + list
-  var html = '<input type="text" id="spellPickerSearch" placeholder="Buscar..." oninput="filterSpellPicker()" style="width:100%;padding:8px;margin-bottom:8px;background:var(--surface-container-low);border:none;border-bottom:1px solid var(--outline-variant);color:var(--on-surface);font-family:Crimson Text,serif;font-size:14px;outline:none;">';
-  html += '<div id="spellPickerList" style="max-height:300px;overflow-y:auto;">';
-  html += buildSpellPickerItems(spells);
-  html += '</div>';
-  html += '<input type="hidden" id="spellPickerSelected" value="">';
-  // Store data for filtering
-  html += '<script type="text/json" id="spellPickerData">' + JSON.stringify(spells.map(function(s){return{name:s.name,school:s.school,ritual:s.ritual,racial:s.racial||false};})) + '</script>';
 
-  bodyEl.innerHTML = html;
-  inputWrap.style.display = 'none';
 
-  actionsEl.innerHTML = '<button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancelar</button>' +
-    '<button class="modal-btn modal-btn-confirm" onclick="confirmSpellPick(' + lvl + ')">Agregar</button>';
-
-  // Store lvl for the picker
-  window._spellPickerLvl = lvl;
-  window._spellPickerSpells = spells;
-
-  overlay.style.display = 'flex';
-  setTimeout(function(){ var s = document.getElementById('spellPickerSearch'); if(s) s.focus(); }, 100);
-}
-
-function buildSpellPickerItems(spells){
-  return spells.map(function(s){
-    var tags = s.school;
-    if(s.ritual) tags += ' · Ritual';
-    if(s.racial) tags += ' · Racial';
-    return '<div class="modal-char-option" onclick="selectSpellPickerItem(this,\'' + s.name.replace(/'/g,"\\'") + '\')" data-name="' + s.name.replace(/"/g,'&quot;') + '">' +
-      '<span style="font-family:Cinzel,serif;font-size:13px;color:var(--on-surface);font-weight:600;">' + s.name + '</span>' +
-      '<span style="font-family:Manrope,sans-serif;font-size:9px;color:var(--on-surface-muted);">' + tags + '</span>' +
-    '</div>';
-  }).join('');
-}
-
-function selectSpellPickerItem(el, name){
-  document.querySelectorAll('#spellPickerList .modal-char-option').forEach(function(e){e.classList.remove('selected');});
-  el.classList.add('selected');
-  document.getElementById('spellPickerSelected').value = name;
-}
-
-function filterSpellPicker(){
-  var search = (document.getElementById('spellPickerSearch')||{}).value||'';
-  search = search.toLowerCase().trim();
-  var items = document.querySelectorAll('#spellPickerList .modal-char-option');
-  items.forEach(function(el){
-    var name = (el.getAttribute('data-name')||'').toLowerCase();
-    el.style.display = (!search || name.indexOf(search) !== -1) ? 'flex' : 'none';
-  });
-}
-
-function confirmSpellPick(lvl){
-  var name = (document.getElementById('spellPickerSelected')||{}).value || '';
-  if(!name){ showToast('Seleccioná un conjuro', true); return; }
-  closeModal();
-  if(!state.spells[lvl]) state.spells[lvl] = {slots:0, used:0, list:[], prep:[]};
-  state.spells[lvl].list.push(name);
-  state.spells[lvl].prep.push(false);
-  renderSpells();
-  showToast((lvl===0?'Truco':'Conjuro') + ' agregado: ' + name);
-}
 
 function removeSpell(lvl,idx){
   if(!state.spells[lvl]) return;
