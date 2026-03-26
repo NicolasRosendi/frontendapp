@@ -18,6 +18,7 @@ const state = {
   editMode: false,
   inspiration: false,
   hasShield: false,
+  shieldBonus: 0,
   deathSaves: [false,false,false,false,false,false],
   stats: { str:10, dex:10, con:10, int:10, wis:10, cha:10 },
   hpCurr:10, hpMax:10, hpTemp:0,
@@ -281,6 +282,7 @@ function loadStateFromData(d, name) {
   state.editMode = false;
   state.inspiration = d.inspiration || false;
   state.hasShield = d.hasShield || false;
+  state.shieldBonus = d.shieldBonus || 0;
   state.deathSaves = d.deathSaves || [false,false,false,false,false,false];
   state.stats = d.stats || { str:10, dex:10, con:10, int:10, wis:10, cha:10 };
   state.hpCurr = d.hpCurr !== undefined ? d.hpCurr : 10;
@@ -296,7 +298,7 @@ function loadStateFromData(d, name) {
   state.spells = ensureSpells(d.spells);
   // Text fields
   textFields = {};
-  const tf = ['charName','class','level','race','subrace','background','alignment','player','xp','proficiencies','personality','ideals','bonds','flaws','traits','age','height','weight','eyes','skin','hair','appearance','backstory','allies','treasure','additionalTraits','ac','initiative','speed','hitDice','hdTotal','armorCA','armorName','coinPP','coinPO','coinPE','coinPPT','coinPC','spellAbility'];
+  const tf = ['charName','class','level','race','subrace','subclass','pactBoon','background','alignment','player','xp','proficiencies','personality','ideals','bonds','flaws','traits','age','height','weight','eyes','skin','hair','appearance','backstory','allies','treasure','additionalTraits','ac','initiative','speed','hitDice','hdTotal','armorCA','armorName','coinPP','coinPO','coinPE','coinPPT','coinPC','spellAbility'];
   tf.forEach(k => { if (d[k] !== undefined) textFields[k] = String(d[k]); });
   if (name && !textFields.charName) textFields.charName = name;
 }
@@ -306,6 +308,7 @@ function getStateForSave() {
     ...textFields,
     inspiration: state.inspiration,
     hasShield: state.hasShield,
+    shieldBonus: state.shieldBonus,
     deathSaves: state.deathSaves,
     stats: state.stats,
     hpCurr: state.hpCurr,
@@ -1153,12 +1156,8 @@ function renderAll(){
   }else{
     profEl.textContent=fmt(state.profBonus);
   }
-  // Shield toggle state
-  var shEl=document.getElementById('shieldToggle');
-  if(shEl){
-    shEl.textContent=state.hasShield?'Escudo ✓':'Escudo ✗';
-    shEl.style.background=state.hasShield?'var(--tertiary-container,#4c2a8c)':'';
-  }
+  // Shield display
+  renderShieldDisplay();
 }
 
 // Interactions
@@ -1171,12 +1170,30 @@ function toggleEdit(){
 function switchTab(name,btn){ document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.getElementById('tab-'+name).classList.add('active'); btn.classList.add('active'); }
 function switchSub(name,btn){ document.querySelectorAll('.sub-content').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.sub-tab-btn').forEach(b=>b.classList.remove('active')); document.getElementById('sub-'+name).classList.add('active'); btn.classList.add('active'); }
 function toggleInspiration(){ state.inspiration=!state.inspiration; document.getElementById('inspBox').classList.toggle('lit',state.inspiration); document.getElementById('inspVal').textContent=state.inspiration?'✦':'—'; }
-function toggleShield(){
-  state.hasShield=!state.hasShield;
-  var el=document.getElementById('shieldToggle');
-  if(el){
-    el.textContent=state.hasShield?'Escudo ✓':'Escudo ✗';
-    el.style.background=state.hasShield?'var(--tertiary-container,#4c2a8c)':'';
+function cycleShield(){
+  // Cycle: 0 (no shield) → 2 (shield +2CA) → 3 (shield+1 +3CA) → 4 (shield+2 +4CA) → 0
+  var cycle = [0, 2, 3, 4];
+  var idx = cycle.indexOf(state.shieldBonus);
+  idx = (idx + 1) % cycle.length;
+  state.shieldBonus = cycle[idx];
+  state.hasShield = state.shieldBonus > 0;
+  renderShieldDisplay();
+}
+function renderShieldDisplay(){
+  var el = document.getElementById('shieldToggle');
+  if(!el) return;
+  if(state.shieldBonus === 0){
+    el.textContent = 'Escudo ✗';
+    el.style.background = '';
+  } else if(state.shieldBonus === 2){
+    el.textContent = 'Escudo +2';
+    el.style.background = 'var(--tertiary-container,#4c2a8c)';
+  } else if(state.shieldBonus === 3){
+    el.textContent = 'Escudo+1 +3';
+    el.style.background = 'var(--tertiary-container,#4c2a8c)';
+  } else if(state.shieldBonus === 4){
+    el.textContent = 'Escudo+2 +4';
+    el.style.background = 'var(--tertiary-container,#4c2a8c)';
   }
 }
 function toggleDS(idx){ state.deathSaves[idx]=!state.deathSaves[idx]; const id=idx<3?'ds'+idx:'df'+(idx-3); document.getElementById(id).classList.toggle('filled',state.deathSaves[idx]); }
@@ -1997,6 +2014,15 @@ function renderClassRaceSelectors() {
     var cls = textFields['class'] || '';
     var casterClasses = ['Bardo','Brujo','Clérigo','Druida','Explorador','Hechicero','Mago','Paladín'];
     if (link) link.style.display = casterClasses.indexOf(cls) !== -1 ? 'block' : 'none';
+    // Show subclass/pact in view mode
+    var subclassC = document.getElementById('subclassFieldContainer');
+    var subclassE = document.getElementById('subclassField');
+    if (subclassC && textFields['subclass']) { subclassC.style.display = 'block'; subclassE.textContent = textFields['subclass']; }
+    else if (subclassC) { subclassC.style.display = 'none'; }
+    var pactC = document.getElementById('pactFieldContainer');
+    var pactE = document.getElementById('pactField');
+    if (pactC && textFields['pactBoon'] && textFields['class'] === 'Brujo') { pactC.style.display = 'block'; pactE.textContent = textFields['pactBoon']; }
+    else if (pactC) { pactC.style.display = 'none'; }
     return;
   }
 
@@ -2068,6 +2094,95 @@ function renderClassRaceSelectors() {
   // Spells link
   var link = document.getElementById('spellsAvailableLink');
   if (link) link.style.display = 'none'; // hide in edit mode
+
+  // Subclass selector
+  renderSubclassSelector();
+  // Pact boon selector (Brujo only)
+  renderPactBoonSelector();
+}
+
+function renderSubclassSelector() {
+  var container = document.getElementById('subclassFieldContainer');
+  var subclassEl = document.getElementById('subclassField');
+  if (!container || !subclassEl) return;
+
+  var className = textFields['class'] || '';
+  if (!className || typeof CLASS_PROGRESSION === 'undefined') {
+    container.style.display = 'none';
+    return;
+  }
+
+  var cls = CLASS_PROGRESSION.find(function(c) { return c.name === className; });
+  var subclasses = cls && cls.subclasses_detail ? Object.keys(cls.subclasses_detail) : [];
+
+  if (subclasses.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+
+  if (state.editMode && subclassEl.tagName !== 'SELECT') {
+    var currentSub = textFields['subclass'] || '';
+    var sel = document.createElement('select');
+    sel.style.cssText = 'width:100%;background:var(--surface-dim);border:none;border-bottom:1px solid var(--primary-dim);color:var(--on-surface);font-family:Cinzel,serif;font-size:12px;padding:4px;outline:none;';
+    var opt0 = document.createElement('option');
+    opt0.value = ''; opt0.textContent = '— Elegir subclase —';
+    sel.appendChild(opt0);
+    subclasses.forEach(function(sn) {
+      var opt = document.createElement('option');
+      opt.value = sn; opt.textContent = sn;
+      if (sn === currentSub) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', function() {
+      textFields['subclass'] = sel.value;
+      showToast('Subclase: ' + sel.value);
+    });
+    subclassEl.innerHTML = '';
+    subclassEl.appendChild(sel);
+  } else if (!state.editMode) {
+    subclassEl.textContent = textFields['subclass'] || '—';
+  }
+}
+
+function renderPactBoonSelector() {
+  var container = document.getElementById('pactFieldContainer');
+  var pactEl = document.getElementById('pactField');
+  if (!container || !pactEl) return;
+
+  var className = textFields['class'] || '';
+  var level = parseInt(textFields['level']) || 1;
+
+  // Only show for Brujo level 3+
+  if (className !== 'Brujo' || level < 3) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+
+  if (state.editMode && pactEl.tagName !== 'SELECT') {
+    var currentPact = textFields['pactBoon'] || '';
+    var pacts = ['— Elegir pacto —', 'Pacto del Tomo', 'Pacto de la Hoja', 'Pacto de la Cadena'];
+    var sel = document.createElement('select');
+    sel.style.cssText = 'width:100%;background:var(--surface-dim);border:none;border-bottom:1px solid var(--primary-dim);color:var(--on-surface);font-family:Cinzel,serif;font-size:12px;padding:4px;outline:none;';
+    pacts.forEach(function(p, i) {
+      var opt = document.createElement('option');
+      opt.value = i === 0 ? '' : p;
+      opt.textContent = p;
+      if (p === currentPact) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', function() {
+      textFields['pactBoon'] = sel.value;
+      showToast('Favor del Pacto: ' + sel.value);
+    });
+    pactEl.innerHTML = '';
+    pactEl.appendChild(sel);
+  } else if (!state.editMode) {
+    pactEl.textContent = textFields['pactBoon'] || '—';
+  }
 }
 
 function onClassChanged(className) {
