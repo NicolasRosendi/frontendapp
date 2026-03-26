@@ -360,6 +360,14 @@
           <span class="id-label">Subraza</span>
           <span class="id-value" id="subraceField" data-field="subrace">—</span>
         </div>
+        <div class="id-field" id="subclassFieldContainer" style="display:none;">
+          <span class="id-label">Subclase</span>
+          <span class="id-value" id="subclassField" data-field="subclass">—</span>
+        </div>
+        <div class="id-field" id="pactFieldContainer" style="display:none;">
+          <span class="id-label">Favor del Pacto</span>
+          <span class="id-value" id="pactField" data-field="pactBoon">—</span>
+        </div>
         <div class="id-field"><span class="id-label">Transfondo</span><span class="id-value" data-field="background">—</span></div>
         <div class="id-field"><span class="id-label">Alineamiento</span><span class="id-value" data-field="alignment">—</span></div>
         <div class="id-field"><span class="id-label">Jugador</span><span class="id-value" data-field="player">—</span></div>
@@ -452,7 +460,7 @@
     <div class="sub-content" id="sub-weapons">
       <div class="sub-inner">
         <div class="card"><div class="card-title">Armadura</div>
-          <div class="armor-row"><span class="armor-ca" data-field="armorCA">10</span><span class="armor-name" data-field="armorName">Sin armadura</span><span class="armor-badge" id="shieldToggle" onclick="toggleShield()" style="cursor:pointer;">Escudo ✗</span></div>
+          <div class="armor-row"><span class="armor-ca" data-field="armorCA">10</span><span class="armor-name" data-field="armorName">Sin armadura</span><span class="armor-badge" id="shieldToggle" onclick="cycleShield()" style="cursor:pointer;">Escudo ✗</span></div>
         </div>
         <div class="card"><div class="card-title">Armamento</div>
           <div class="attacks-header"><span>Nombre</span><span style="text-align:center;">Bon.</span><span>Daño/Tipo</span></div>
