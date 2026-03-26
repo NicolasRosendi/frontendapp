@@ -361,6 +361,7 @@ async function loadTables() {
           <button class="char-action-btn" onclick="openTable(${t.id})">Entrar</button>
           ${t.is_owner && t.status === 'lobby' ? '<button class="char-action-btn" onclick="startCombat(' + t.id + ')">⚔ Iniciar Combate</button>' : ''}
           ${t.is_owner && t.status === 'combat' ? '<button class="char-action-btn del" onclick="endCombat(' + t.id + ')">Terminar</button>' : ''}
+          ${t.is_owner ? '<button class="char-action-btn del" onclick="deleteTable(' + t.id + ',\'' + t.name.replace(/'/g, "\\'") + '\')">Borrar</button>' : ''}
         </div>
       </div>
     `).join('');
@@ -638,11 +639,23 @@ async function startCombat(tableId) {
 }
 
 async function endCombat(tableId) {
-  if (!confirm('¿Terminar el combate?')) return;
+  var result = await showConfirm('Terminar Combate', '¿Estás seguro de terminar el combate?');
+  if (!result) return;
   try {
     await api('/tables/' + tableId + '/combat/end', { method: 'POST' });
     showToast('Combate finalizado');
     loadTables();
+  } catch (err) { showToast(err.message, true); }
+}
+
+async function deleteTable(tableId, tableName) {
+  var result = await showConfirm('Borrar Mesa', '¿Estás seguro de borrar la mesa "' + tableName + '"? Se eliminará para todos los jugadores.');
+  if (!result) return;
+  try {
+    await api('/tables/' + tableId, { method: 'DELETE' });
+    showToast('Mesa eliminada');
+    loadTables();
+    loadPublicTables();
   } catch (err) { showToast(err.message, true); }
 }
 
