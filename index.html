@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>D&D 5e — Digital Chronicle</title>
-<link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>D&D 5e — Digital Chronicle</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
@@ -136,6 +136,41 @@
 </div>
 
 <!-- ═══════════════════════════════════════
+     SCREEN 3B: TABLE ROOM (SALA DE MESA)
+     ═══════════════════════════════════════ -->
+<div class="combat-screen" id="tableRoomScreen">
+  <div class="combat-header">
+    <div>
+      <div class="combat-title-bar" id="tableRoomName" style="color:var(--primary);">Mesa</div>
+      <div class="combat-round" id="tableRoomCode">Código: —</div>
+    </div>
+    <button class="combat-back-btn" onclick="leaveTableRoom()">← Lobby</button>
+  </div>
+  <div style="padding:16px;padding-bottom:80px;">
+    <div class="card" style="border-left:3px solid var(--primary);">
+      <div class="card-title">Estado de la Mesa</div>
+      <div id="tableRoomStatus" style="font-family:'Crimson Text',serif;font-size:15px;color:var(--on-surface-dim);">Esperando jugadores...</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Jugadores en la Mesa</div>
+      <div id="tableRoomPlayers"><div class="spinner"></div></div>
+    </div>
+    <div id="tableRoomOwnerActions" style="display:none;margin-bottom:8px;">
+      <button class="attack-btn" style="width:100%;" onclick="startCombatFromRoom()">⚔ Iniciar Combate</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Compartir Mesa</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div id="tableRoomShareCode" style="font-family:Cinzel,serif;font-size:28px;font-weight:900;color:var(--primary);letter-spacing:8px;flex:1;text-align:center;background:var(--surface-container-low);padding:16px;">—</div>
+        <button class="char-action-btn" onclick="copyTableCode()" style="padding:16px 12px;">Copiar</button>
+      </div>
+      <div style="font-family:Manrope,sans-serif;font-size:10px;color:var(--on-surface-muted);text-align:center;margin-top:8px;text-transform:uppercase;letter-spacing:1px;">Compartí este código con tus amigos</div>
+    </div>
+    <button class="pass-btn" style="width:100%;margin-top:8px;" onclick="leaveTablePermanently()">Abandonar Mesa</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
      SCREEN 3: COMBAT VIEW
      ═══════════════════════════════════════ -->
 <div class="combat-screen" id="combatScreen">
@@ -213,12 +248,25 @@
       <!-- SPELL: pedir salvación al rival -->
       <div id="combatSpellPanel" style="display:none;">
         <div class="card">
-          <div class="card-title">Conjuro — Tirada de Salvación</div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px;background:var(--surface-container-low,#1e1b19);">
+          <div class="card-title">Conjuros Disponibles</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px;background:var(--surface-container-low);">
             <span style="font-family:Manrope,sans-serif;font-size:10px;color:var(--on-surface-muted);text-transform:uppercase;letter-spacing:1px;">Mi CD Conjuro:</span>
-            <span id="spellDCDisplay" style="font-family:Cinzel,serif;font-size:22px;font-weight:800;color:var(--tertiary,#d2bcff);">—</span>
+            <span id="spellDCDisplay" style="font-family:Cinzel,serif;font-size:22px;font-weight:800;color:var(--tertiary);">—</span>
+            <span style="font-family:Manrope,sans-serif;font-size:10px;color:var(--on-surface-muted);margin-left:auto;text-transform:uppercase;letter-spacing:1px;">Ataque:</span>
+            <span id="spellAtkDisplay" style="font-family:Cinzel,serif;font-size:22px;font-weight:800;color:var(--primary);">—</span>
           </div>
-          <div style="margin-bottom:10px;">
+          <!-- Filtro por nivel de conjuro -->
+          <div style="display:flex;gap:3px;margin-bottom:8px;flex-wrap:wrap;" id="combatSpellLevelFilter"></div>
+          <!-- Slots disponibles -->
+          <div id="combatSpellSlots" style="margin-bottom:8px;"></div>
+          <!-- Lista de hechizos -->
+          <div id="combatSpellList" style="max-height:300px;overflow-y:auto;"></div>
+        </div>
+        <!-- Panel de resolución (salvación/daño) -->
+        <div class="card" id="combatSpellResolve" style="display:none;">
+          <div class="card-title" id="combatSpellResolveName">—</div>
+          <div id="combatSpellResolveInfo" style="font-family:Crimson Text,serif;font-size:13px;color:var(--on-surface-dim);margin-bottom:8px;"></div>
+          <div style="margin-bottom:8px;">
             <span class="dice-control-label">Stat de salvación del rival</span>
             <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;" id="spellSaveStatRow">
               <button class="adv-btn" onclick="setSpellSaveStat('str')">FUE</button>
@@ -229,22 +277,22 @@
               <button class="adv-btn" onclick="setSpellSaveStat('cha')">CAR</button>
             </div>
           </div>
-          <div style="margin-bottom:10px;">
+          <div style="margin-bottom:8px;">
             <span class="dice-control-label">Si supera la salvación</span>
             <div style="display:flex;gap:4px;margin-top:6px;">
               <button class="adv-btn adv-active" id="spellSuccessNoneBtn" onclick="setSpellSaveOnSuccess('none')">Sin daño</button>
-              <button class="adv-btn" id="spellSuccessHalfBtn" onclick="setSpellSaveOnSuccess('half')">Mitad de daño</button>
+              <button class="adv-btn" id="spellSuccessHalfBtn" onclick="setSpellSaveOnSuccess('half')">Mitad</button>
             </div>
           </div>
           <button class="roll-btn" id="spellSaveRollBtn" onclick="rollSpellSave()" disabled>✦ Forzar Salvación</button>
-          <div class="dice-result-area" id="spellSaveResult" style="min-height:50px;">
-            <div class="result-empty" style="padding:8px 0;">Seleccioná objetivo y stat</div>
+          <div class="dice-result-area" id="spellSaveResult" style="min-height:40px;">
+            <div class="result-empty" style="padding:6px 0;">Seleccioná objetivo y stat</div>
           </div>
         </div>
         <div class="card" id="spellDmgPanel" style="display:none;">
           <div class="card-title" id="spellDmgPanelLabel">Daño del Conjuro</div>
           <div class="dice-grid" id="spellDmgDiceGrid" style="margin-bottom:8px;"></div>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
             <span class="dice-control-label" style="min-width:auto;">Cantidad</span>
             <div class="qty-row">
               <button class="qty-btn" onclick="changeSpellDmgQty(-1)">−</button>
@@ -252,11 +300,11 @@
               <button class="qty-btn" onclick="changeSpellDmgQty(1)">+</button>
             </div>
             <span class="dice-control-label" style="min-width:auto;">Mod</span>
-            <input class="mod-input" id="spellDmgMod" type="number" placeholder="0" value="0" style="max-width:70px;">
+            <input class="mod-input" id="spellDmgMod" type="number" placeholder="0" value="0" style="max-width:60px;">
           </div>
           <button class="roll-btn" id="spellDmgRollBtn" onclick="rollSpellDamage()" disabled>🎲 Tirar Daño</button>
-          <div class="dice-result-area" id="spellDmgResult" style="min-height:50px;">
-            <div class="result-empty" style="padding:8px 0;">Seleccioná dado de daño</div>
+          <div class="dice-result-area" id="spellDmgResult" style="min-height:40px;">
+            <div class="result-empty" style="padding:6px 0;">Seleccioná dado</div>
           </div>
         </div>
         <div class="combat-btn-row" style="margin-top:8px;">
@@ -275,208 +323,208 @@
      SCREEN 4: CHARACTER SHEET
      ═══════════════════════════════════════ -->
 <div class="app-wrapper" id="appWrapper">
-<div class="rune-border"></div>
-<header class="app-header">
-  <div class="header-top">
-    <button class="back-to-lobby" onclick="backToLobby()">← Lobby</button>
-    <span class="char-name-header" id="headerName">—</span>
-    <button class="edit-btn" id="editToggle" onclick="toggleEdit()">EDITAR</button>
-  </div>
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('main',this)">Personaje</button>
-    <button class="tab-btn" onclick="switchTab('combat',this)">Combate</button>
-    <button class="tab-btn" onclick="switchTab('inventory',this)">Inventario</button>
-    <button class="tab-btn" onclick="switchTab('dice',this)">Dados</button>
-    <button class="tab-btn" onclick="switchTab('backstory',this)">Historia</button>
-  </div>
-</header>
+  <div class="rune-border"></div>
+  <header class="app-header">
+    <div class="header-top">
+      <button class="back-to-lobby" onclick="backToLobby()">← Lobby</button>
+      <span class="char-name-header" id="headerName">—</span>
+      <button class="edit-btn" id="editToggle" onclick="toggleEdit()">EDITAR</button>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('main',this)">Personaje</button>
+      <button class="tab-btn" onclick="switchTab('combat',this)">Combate</button>
+      <button class="tab-btn" onclick="switchTab('inventory',this)">Inventario</button>
+      <button class="tab-btn" onclick="switchTab('dice',this)">Dados</button>
+      <button class="tab-btn" onclick="switchTab('backstory',this)">Historia</button>
+    </div>
+  </header>
 
-<!-- PERSONAJE -->
-<div class="tab-content active tab-padded" id="tab-main">
-  <div class="card">
-    <div class="identity-grid">
-      <div class="id-field full"><span class="id-label">Nombre del personaje</span><span class="id-value" data-field="charName">—</span></div>
-      <div class="id-field">
-        <span class="id-label">Clase</span>
-        <span class="id-value" id="classField" data-field="class">—</span>
-      </div>
-      <div class="id-field">
-        <span class="id-label">Nivel</span>
-        <span class="id-value" id="levelField" data-field="level">1</span>
-      </div>
-      <div class="id-field">
-        <span class="id-label">Raza</span>
-        <span class="id-value" id="raceField" data-field="race">—</span>
-      </div>
-      <div class="id-field" id="subraceFieldContainer" style="display:none;">
-        <span class="id-label">Subraza</span>
-        <span class="id-value" id="subraceField" data-field="subrace">—</span>
-      </div>
-      <div class="id-field"><span class="id-label">Transfondo</span><span class="id-value" data-field="background">—</span></div>
-      <div class="id-field"><span class="id-label">Alineamiento</span><span class="id-value" data-field="alignment">—</span></div>
-      <div class="id-field"><span class="id-label">Jugador</span><span class="id-value" data-field="player">—</span></div>
-      <div class="id-field"><span class="id-label">Experiencia</span><span class="id-value" data-field="xp">—</span></div>
-    </div>
-    <!-- Conjuros disponibles link -->
-    <div id="spellsAvailableLink" style="display:none;margin-top:8px;">
-      <button class="add-btn" onclick="goToClassSpells()" style="text-align:center;">✦ Ver conjuros disponibles para mi clase</button>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title">Estadísticas <span style="float:right;font-weight:400;color:var(--on-surface-muted);font-size:9px;letter-spacing:1px;">MÁX 20</span></div>
-    <div class="stats-grid" id="statsGrid"></div>
-  </div>
-  <div class="top-stats">
-    <div class="insp-box" id="inspBox" onclick="toggleInspiration()">
-      <span class="insp-icon">✦</span>
-      <div class="insp-val" id="inspVal">—</div>
-      <div class="insp-label">Inspiración</div>
-    </div>
-    <div class="insp-box" style="cursor:default;">
-      <span class="insp-icon" style="font-family:'Cinzel',serif;font-size:28px;color:var(--primary)" id="profBonusDisp">+2</span>
-      <div class="insp-label">Bon. Competencia</div>
-    </div>
-  </div>
-  <div class="card"><div class="card-title">Tiradas de Salvación</div><div class="saves-list" id="savesList"></div></div>
-  <div class="card">
-    <div class="card-title">Habilidades <span id="passivePerc" style="float:right;font-family:'Manrope',sans-serif;font-weight:500;color:var(--on-surface-muted);font-size:10px;letter-spacing:0;">Percepción Pasiva: 10</span></div>
-    <div class="skills-list" id="skillsList"></div>
-  </div>
-  <div class="card"><div class="card-title">Competencias e Idiomas</div><div class="text-block" data-field="proficiencies">—</div></div>
-  <div class="card">
-    <div class="card-title">Rasgos del Personaje</div>
-    <div class="text-label">Rasgos de Personalidad</div><div class="text-block" data-field="personality">—</div>
-    <div class="text-label">Ideales</div><div class="text-block" data-field="ideals">—</div>
-    <div class="text-label">Vínculos</div><div class="text-block" data-field="bonds">—</div>
-    <div class="text-label">Defectos</div><div class="text-block" data-field="flaws">—</div>
-  </div>
-</div>
-
-<!-- COMBATE -->
-<div class="tab-content" id="tab-combat">
-  <div class="sub-tabs">
-    <button class="sub-tab-btn active" onclick="switchSub('general',this)">General</button>
-    <button class="sub-tab-btn" onclick="switchSub('weapons',this)">Armamento</button>
-    <button class="sub-tab-btn" onclick="switchSub('spells',this)">Conjuros</button>
-  </div>
-  <div class="sub-content active" id="sub-general">
-    <div class="sub-inner">
-      <div class="card">
-        <div class="card-title">Estadísticas de Combate</div>
-        <div class="combat-row">
-          <div class="combat-box"><div class="combat-label">Clase de Armadura</div><div class="combat-val" data-field="ac">10</div></div>
-          <div class="combat-box"><div class="combat-label">Iniciativa</div><div class="combat-val" data-field="initiative">+0</div></div>
-          <div class="combat-box"><div class="combat-label">Velocidad</div><div class="combat-val" data-field="speed">30ft</div></div>
+  <!-- PERSONAJE -->
+  <div class="tab-content active tab-padded" id="tab-main">
+    <div class="card">
+      <div class="identity-grid">
+        <div class="id-field full"><span class="id-label">Nombre del personaje</span><span class="id-value" data-field="charName">—</span></div>
+        <div class="id-field">
+          <span class="id-label">Clase</span>
+          <span class="id-value" id="classField" data-field="class">—</span>
         </div>
-        <div class="hp-section">
-          <div class="hp-top"><span class="hp-label">Puntos de Golpe</span><span class="hp-vals"><span id="hpCurr">10</span> / <span id="hpMax">10</span></span></div>
-          <div class="hp-bar-bg"><div class="hp-bar-fill" id="hpBar" style="width:100%"></div></div>
-          <div class="hp-input-row">
-            <input class="hp-num-input" id="hpChange" type="number" min="0" placeholder="Cantidad"/>
-            <button class="hp-btn dmg" onclick="changeHP(-1)">⚔ Daño</button>
-            <button class="hp-btn heal" onclick="changeHP(1)">♥ Curar</button>
+        <div class="id-field">
+          <span class="id-label">Nivel</span>
+          <span class="id-value" id="levelField" data-field="level">1</span>
+        </div>
+        <div class="id-field">
+          <span class="id-label">Raza</span>
+          <span class="id-value" id="raceField" data-field="race">—</span>
+        </div>
+        <div class="id-field" id="subraceFieldContainer" style="display:none;">
+          <span class="id-label">Subraza</span>
+          <span class="id-value" id="subraceField" data-field="subrace">—</span>
+        </div>
+        <div class="id-field"><span class="id-label">Transfondo</span><span class="id-value" data-field="background">—</span></div>
+        <div class="id-field"><span class="id-label">Alineamiento</span><span class="id-value" data-field="alignment">—</span></div>
+        <div class="id-field"><span class="id-label">Jugador</span><span class="id-value" data-field="player">—</span></div>
+        <div class="id-field"><span class="id-label">Experiencia</span><span class="id-value" data-field="xp">—</span></div>
+      </div>
+      <!-- Conjuros disponibles link -->
+      <div id="spellsAvailableLink" style="display:none;margin-top:8px;">
+        <button class="add-btn" onclick="goToClassSpells()" style="text-align:center;">✦ Ver conjuros disponibles para mi clase</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Estadísticas <span style="float:right;font-weight:400;color:var(--on-surface-muted);font-size:9px;letter-spacing:1px;">MÁX 20</span></div>
+      <div class="stats-grid" id="statsGrid"></div>
+    </div>
+    <div class="top-stats">
+      <div class="insp-box" id="inspBox" onclick="toggleInspiration()">
+        <span class="insp-icon">✦</span>
+        <div class="insp-val" id="inspVal">—</div>
+        <div class="insp-label">Inspiración</div>
+      </div>
+      <div class="insp-box" style="cursor:default;">
+        <span class="insp-icon" style="font-family:'Cinzel',serif;font-size:28px;color:var(--primary)" id="profBonusDisp">+2</span>
+        <div class="insp-label">Bon. Competencia</div>
+      </div>
+    </div>
+    <div class="card"><div class="card-title">Tiradas de Salvación</div><div class="saves-list" id="savesList"></div></div>
+    <div class="card">
+      <div class="card-title">Habilidades <span id="passivePerc" style="float:right;font-family:'Manrope',sans-serif;font-weight:500;color:var(--on-surface-muted);font-size:10px;letter-spacing:0;">Percepción Pasiva: 10</span></div>
+      <div class="skills-list" id="skillsList"></div>
+    </div>
+    <div class="card"><div class="card-title">Competencias e Idiomas</div><div class="text-block" data-field="proficiencies">—</div></div>
+    <div class="card">
+      <div class="card-title">Rasgos del Personaje</div>
+      <div class="text-label">Rasgos de Personalidad</div><div class="text-block" data-field="personality">—</div>
+      <div class="text-label">Ideales</div><div class="text-block" data-field="ideals">—</div>
+      <div class="text-label">Vínculos</div><div class="text-block" data-field="bonds">—</div>
+      <div class="text-label">Defectos</div><div class="text-block" data-field="flaws">—</div>
+    </div>
+  </div>
+
+  <!-- COMBATE -->
+  <div class="tab-content" id="tab-combat">
+    <div class="sub-tabs">
+      <button class="sub-tab-btn active" onclick="switchSub('general',this)">General</button>
+      <button class="sub-tab-btn" onclick="switchSub('weapons',this)">Armamento</button>
+      <button class="sub-tab-btn" onclick="switchSub('spells',this)">Conjuros</button>
+    </div>
+    <div class="sub-content active" id="sub-general">
+      <div class="sub-inner">
+        <div class="card">
+          <div class="card-title">Estadísticas de Combate</div>
+          <div class="combat-row">
+            <div class="combat-box"><div class="combat-label">Clase de Armadura</div><div class="combat-val" data-field="ac">10</div></div>
+            <div class="combat-box"><div class="combat-label">Iniciativa</div><div class="combat-val" data-field="initiative">+0</div></div>
+            <div class="combat-box"><div class="combat-label">Velocidad</div><div class="combat-val" data-field="speed">30ft</div></div>
           </div>
-        </div>
-        <div class="section-label" style="margin-top:6px;">PG Temporales</div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0;"><span class="hp-label">Temporales</span><span class="hp-vals" id="hpTemp">0</span></div>
-        <div class="hit-dice-row"><span class="hd-label">Dados de Golpe</span><span class="hd-val" data-field="hitDice">d8+0</span><span class="hd-current">Total: <span data-field="hdTotal">1</span></span></div>
-        <div class="death-saves" style="margin-top:8px;">
-          <span class="death-label">Salvaciones<br>contra muerte</span>
-          <div>
-            <div class="save-row" style="margin-bottom:4px;">
-              <span class="save-type" style="color:var(--green-bright);font-size:10px;margin-right:4px;">✓</span>
-              <div class="save-dot success" id="ds0" onclick="toggleDS(0)"></div>
-              <div class="save-dot success" id="ds1" onclick="toggleDS(1)"></div>
-              <div class="save-dot success" id="ds2" onclick="toggleDS(2)"></div>
-            </div>
-            <div class="save-row">
-              <span class="save-type" style="color:var(--red-bright);font-size:10px;margin-right:4px;">✗</span>
-              <div class="save-dot fail" id="df0" onclick="toggleDS(3)"></div>
-              <div class="save-dot fail" id="df1" onclick="toggleDS(4)"></div>
-              <div class="save-dot fail" id="df2" onclick="toggleDS(5)"></div>
+          <div class="hp-section">
+            <div class="hp-top"><span class="hp-label">Puntos de Golpe</span><span class="hp-vals"><span id="hpCurr">10</span> / <span id="hpMax">10</span></span></div>
+            <div class="hp-bar-bg"><div class="hp-bar-fill" id="hpBar" style="width:100%"></div></div>
+            <div class="hp-input-row">
+              <input class="hp-num-input" id="hpChange" type="number" min="0" placeholder="Cantidad"/>
+              <button class="hp-btn dmg" onclick="changeHP(-1)">⚔ Daño</button>
+              <button class="hp-btn heal" onclick="changeHP(1)">♥ Curar</button>
             </div>
           </div>
+          <div class="section-label" style="margin-top:6px;">PG Temporales</div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;"><span class="hp-label">Temporales</span><span class="hp-vals" id="hpTemp">0</span></div>
+          <div class="hit-dice-row"><span class="hd-label">Dados de Golpe</span><span class="hd-val" data-field="hitDice">d8+0</span><span class="hd-current">Total: <span data-field="hdTotal">1</span></span></div>
+          <div class="death-saves" style="margin-top:8px;">
+            <span class="death-label">Salvaciones<br>contra muerte</span>
+            <div>
+              <div class="save-row" style="margin-bottom:4px;">
+                <span class="save-type" style="color:var(--green-bright);font-size:10px;margin-right:4px;">✓</span>
+                <div class="save-dot success" id="ds0" onclick="toggleDS(0)"></div>
+                <div class="save-dot success" id="ds1" onclick="toggleDS(1)"></div>
+                <div class="save-dot success" id="ds2" onclick="toggleDS(2)"></div>
+              </div>
+              <div class="save-row">
+                <span class="save-type" style="color:var(--red-bright);font-size:10px;margin-right:4px;">✗</span>
+                <div class="save-dot fail" id="df0" onclick="toggleDS(3)"></div>
+                <div class="save-dot fail" id="df1" onclick="toggleDS(4)"></div>
+                <div class="save-dot fail" id="df2" onclick="toggleDS(5)"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card"><div class="card-title">Rasgos y Atributos</div><div class="text-block" data-field="traits">—</div></div>
+      </div>
+    </div>
+    <div class="sub-content" id="sub-weapons">
+      <div class="sub-inner">
+        <div class="card"><div class="card-title">Armadura</div>
+          <div class="armor-row"><span class="armor-ca" data-field="armorCA">10</span><span class="armor-name" data-field="armorName">Sin armadura</span><span class="armor-badge" id="shieldToggle" onclick="toggleShield()" style="cursor:pointer;">Escudo ✗</span></div>
+        </div>
+        <div class="card"><div class="card-title">Armamento</div>
+          <div class="attacks-header"><span>Nombre</span><span style="text-align:center;">Bon.</span><span>Daño/Tipo</span></div>
+          <div id="attacksList"></div>
+          <button class="add-btn" onclick="addAttack()">+ Agregar arma</button>
         </div>
       </div>
-      <div class="card"><div class="card-title">Rasgos y Atributos</div><div class="text-block" data-field="traits">—</div></div>
     </div>
-  </div>
-  <div class="sub-content" id="sub-weapons">
-    <div class="sub-inner">
-      <div class="card"><div class="card-title">Armadura</div>
-        <div class="armor-row"><span class="armor-ca" data-field="armorCA">10</span><span class="armor-name" data-field="armorName">Sin armadura</span><span class="armor-badge" id="shieldToggle" onclick="toggleShield()" style="cursor:pointer;">Escudo ✗</span></div>
-      </div>
-      <div class="card"><div class="card-title">Armamento</div>
-        <div class="attacks-header"><span>Nombre</span><span style="text-align:center;">Bon.</span><span>Daño/Tipo</span></div>
-        <div id="attacksList"></div>
-        <button class="add-btn" onclick="addAttack()">+ Agregar arma</button>
-      </div>
-    </div>
-  </div>
-  <div class="sub-content" id="sub-spells">
-    <div class="sub-inner">
-      <div class="card"><div class="card-title">Clase Lanzadora</div>
-        <div class="spell-meta">
-          <div class="spell-meta-box"><div class="spell-meta-val" data-field="spellAbility">INT</div><div class="spell-meta-label">Aptitud Mágica</div></div>
-          <div class="spell-meta-box"><div class="spell-meta-val" id="spellSaveDC">—</div><div class="spell-meta-label">CD Salvación</div></div>
-          <div class="spell-meta-box"><div class="spell-meta-val" id="spellAttackBonus">—</div><div class="spell-meta-label">Bon. Ataque</div></div>
+    <div class="sub-content" id="sub-spells">
+      <div class="sub-inner">
+        <div class="card"><div class="card-title">Clase Lanzadora</div>
+          <div class="spell-meta">
+            <div class="spell-meta-box"><div class="spell-meta-val" data-field="spellAbility">INT</div><div class="spell-meta-label">Aptitud Mágica</div></div>
+            <div class="spell-meta-box"><div class="spell-meta-val" id="spellSaveDC">—</div><div class="spell-meta-label">CD Salvación</div></div>
+            <div class="spell-meta-box"><div class="spell-meta-val" id="spellAttackBonus">—</div><div class="spell-meta-label">Bon. Ataque</div></div>
+          </div>
         </div>
+        <div id="spellLevels"></div>
       </div>
-      <div id="spellLevels"></div>
     </div>
   </div>
-</div>
 
-<!-- INVENTARIO -->
-<div class="tab-content tab-padded" id="tab-inventory">
-  <div class="card"><div class="card-title">Monedas</div>
-    <div class="coin-grid">
-      <div class="coin-box pp"><div class="coin-label">PP</div><div class="coin-val" data-field="coinPP">0</div></div>
-      <div class="coin-box po"><div class="coin-label">PO</div><div class="coin-val" data-field="coinPO">0</div></div>
-      <div class="coin-box pe"><div class="coin-label">PE</div><div class="coin-val" data-field="coinPE">0</div></div>
-      <div class="coin-box ppt"><div class="coin-label">PPT</div><div class="coin-val" data-field="coinPPT">0</div></div>
-      <div class="coin-box pc"><div class="coin-label">PC</div><div class="coin-val" data-field="coinPC">0</div></div>
+  <!-- INVENTARIO -->
+  <div class="tab-content tab-padded" id="tab-inventory">
+    <div class="card"><div class="card-title">Monedas</div>
+      <div class="coin-grid">
+        <div class="coin-box pp"><div class="coin-label">PP</div><div class="coin-val" data-field="coinPP">0</div></div>
+        <div class="coin-box po"><div class="coin-label">PO</div><div class="coin-val" data-field="coinPO">0</div></div>
+        <div class="coin-box pe"><div class="coin-label">PE</div><div class="coin-val" data-field="coinPE">0</div></div>
+        <div class="coin-box ppt"><div class="coin-label">PPT</div><div class="coin-val" data-field="coinPPT">0</div></div>
+        <div class="coin-box pc"><div class="coin-label">PC</div><div class="coin-val" data-field="coinPC">0</div></div>
+      </div>
     </div>
+    <div class="card"><div class="card-title">Objetos e Inventario</div><div class="inv-list" id="invList"></div><button class="add-btn" style="margin-top:6px;" onclick="addInvItem()">+ Agregar objeto</button></div>
   </div>
-  <div class="card"><div class="card-title">Objetos e Inventario</div><div class="inv-list" id="invList"></div><button class="add-btn" style="margin-top:6px;" onclick="addInvItem()">+ Agregar objeto</button></div>
-</div>
 
-<!-- DADOS -->
-<div class="tab-content tab-padded" id="tab-dice">
-  <div class="card"><div class="card-title">Seleccionar Dado</div><div class="dice-grid" id="diceGrid"></div></div>
-  <div class="card">
-    <div class="card-title">Configuración del Lanzamiento</div>
-    <div class="dice-controls">
-      <div class="dice-control-row"><span class="dice-control-label">Cantidad</span><div class="qty-row"><button class="qty-btn" onclick="changeQty(-1)">−</button><span class="qty-display" id="diceQty">1</span><button class="qty-btn" onclick="changeQty(1)">+</button></div></div>
-      <div class="dice-control-row"><span class="dice-control-label">Modificador</span><input class="mod-input" id="diceMod" type="number" placeholder="0" value="0" style="max-width:100px;"><span style="font-size:11px;color:var(--on-surface-muted);flex:1;font-family:Manrope,sans-serif;">ej: +4, −2</span></div>
-      <div class="dice-control-row" style="flex-direction:column;gap:8px;"><span class="dice-control-label">Modo</span><div class="adv-row"><button class="adv-btn" id="advBtn" onclick="toggleAdvDis('advantage')">▲ Ventaja</button><button class="adv-btn" id="disBtn" onclick="toggleAdvDis('disadvantage')">▼ Desventaja</button></div><span id="advNote" style="font-size:11px;color:var(--on-surface-muted);display:none;font-family:Manrope,sans-serif;"></span></div>
+  <!-- DADOS -->
+  <div class="tab-content tab-padded" id="tab-dice">
+    <div class="card"><div class="card-title">Seleccionar Dado</div><div class="dice-grid" id="diceGrid"></div></div>
+    <div class="card">
+      <div class="card-title">Configuración del Lanzamiento</div>
+      <div class="dice-controls">
+        <div class="dice-control-row"><span class="dice-control-label">Cantidad</span><div class="qty-row"><button class="qty-btn" onclick="changeQty(-1)">−</button><span class="qty-display" id="diceQty">1</span><button class="qty-btn" onclick="changeQty(1)">+</button></div></div>
+        <div class="dice-control-row"><span class="dice-control-label">Modificador</span><input class="mod-input" id="diceMod" type="number" placeholder="0" value="0" style="max-width:100px;"><span style="font-size:11px;color:var(--on-surface-muted);flex:1;font-family:Manrope,sans-serif;">ej: +4, −2</span></div>
+        <div class="dice-control-row" style="flex-direction:column;gap:8px;"><span class="dice-control-label">Modo</span><div class="adv-row"><button class="adv-btn" id="advBtn" onclick="toggleAdvDis('advantage')">▲ Ventaja</button><button class="adv-btn" id="disBtn" onclick="toggleAdvDis('disadvantage')">▼ Desventaja</button></div><span id="advNote" style="font-size:11px;color:var(--on-surface-muted);display:none;font-family:Manrope,sans-serif;"></span></div>
+      </div>
+      <button class="roll-btn" id="rollBtn" onclick="rollDice()" disabled>🎲  Lanzar</button>
     </div>
-    <button class="roll-btn" id="rollBtn" onclick="rollDice()" disabled>🎲  Lanzar</button>
+    <div class="card"><div class="card-title">Resultado</div><div class="dice-result-area" id="diceResultArea"><div class="result-empty">Seleccioná un dado y lanzá</div></div></div>
+    <div class="card" id="historyCard" style="display:none;"><div class="card-title">Historial <button onclick="clearHistory()" style="float:right;background:none;border:none;color:var(--on-surface-muted);font-size:10px;cursor:pointer;font-family:Manrope,sans-serif;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Limpiar</button></div><div class="result-history" id="diceHistory"></div></div>
   </div>
-  <div class="card"><div class="card-title">Resultado</div><div class="dice-result-area" id="diceResultArea"><div class="result-empty">Seleccioná un dado y lanzá</div></div></div>
-  <div class="card" id="historyCard" style="display:none;"><div class="card-title">Historial <button onclick="clearHistory()" style="float:right;background:none;border:none;color:var(--on-surface-muted);font-size:10px;cursor:pointer;font-family:Manrope,sans-serif;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Limpiar</button></div><div class="result-history" id="diceHistory"></div></div>
-</div>
 
-<!-- HISTORIA -->
-<div class="tab-content tab-padded" id="tab-backstory">
-  <div class="card"><div class="card-title">Descripción Física</div>
-    <div class="phys-grid">
-      <div class="phys-box"><div class="phys-label">Edad</div><div class="phys-val" data-field="age">—</div></div>
-      <div class="phys-box"><div class="phys-label">Altura</div><div class="phys-val" data-field="height">—</div></div>
-      <div class="phys-box"><div class="phys-label">Peso</div><div class="phys-val" data-field="weight">—</div></div>
+  <!-- HISTORIA -->
+  <div class="tab-content tab-padded" id="tab-backstory">
+    <div class="card"><div class="card-title">Descripción Física</div>
+      <div class="phys-grid">
+        <div class="phys-box"><div class="phys-label">Edad</div><div class="phys-val" data-field="age">—</div></div>
+        <div class="phys-box"><div class="phys-label">Altura</div><div class="phys-val" data-field="height">—</div></div>
+        <div class="phys-box"><div class="phys-label">Peso</div><div class="phys-val" data-field="weight">—</div></div>
+      </div>
+      <div class="phys-grid-2">
+        <div class="phys-box"><div class="phys-label">Ojos</div><div class="phys-val" data-field="eyes">—</div></div>
+        <div class="phys-box"><div class="phys-label">Piel</div><div class="phys-val" data-field="skin">—</div></div>
+        <div class="phys-box"><div class="phys-label">Pelo</div><div class="phys-val" data-field="hair">—</div></div>
+      </div>
+      <div class="text-label">Aspecto del Personaje</div><div class="text-block" data-field="appearance">—</div>
     </div>
-    <div class="phys-grid-2">
-      <div class="phys-box"><div class="phys-label">Ojos</div><div class="phys-val" data-field="eyes">—</div></div>
-      <div class="phys-box"><div class="phys-label">Piel</div><div class="phys-val" data-field="skin">—</div></div>
-      <div class="phys-box"><div class="phys-label">Pelo</div><div class="phys-val" data-field="hair">—</div></div>
-    </div>
-    <div class="text-label">Aspecto del Personaje</div><div class="text-block" data-field="appearance">—</div>
+    <div class="card"><div class="card-title">Historia del Personaje</div><div class="text-block" data-field="backstory" style="min-height:120px;">—</div></div>
+    <div class="card"><div class="card-title">Aliados y Organizaciones</div><div class="text-block" data-field="allies">—</div></div>
+    <div class="card"><div class="card-title">Tesoro</div><div class="text-block" data-field="treasure">—</div></div>
+    <div class="card"><div class="card-title">Rasgos y Atributos Adicionales</div><div class="text-block" data-field="additionalTraits">—</div></div>
   </div>
-  <div class="card"><div class="card-title">Historia del Personaje</div><div class="text-block" data-field="backstory" style="min-height:120px;">—</div></div>
-  <div class="card"><div class="card-title">Aliados y Organizaciones</div><div class="text-block" data-field="allies">—</div></div>
-  <div class="card"><div class="card-title">Tesoro</div><div class="text-block" data-field="treasure">—</div></div>
-  <div class="card"><div class="card-title">Rasgos y Atributos Adicionales</div><div class="text-block" data-field="additionalTraits">—</div></div>
-</div>
 
 </div><!-- /app-wrapper -->
 
