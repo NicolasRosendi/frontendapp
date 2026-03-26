@@ -975,6 +975,30 @@ function renderSpellMeta(){
   const abilityKey=state.spellAbilityKey||'int'; const abilityMod=mod(state.stats[abilityKey]); const saveDC=8+abilityMod+state.profBonus; const atkBonus=abilityMod+state.profBonus;
   const dcEl=document.getElementById('spellSaveDC'); const atkEl=document.getElementById('spellAttackBonus');
   if(dcEl) dcEl.textContent=saveDC; if(atkEl) atkEl.textContent=fmt(atkBonus);
+  // Show cantrips known and spells preparable info
+  var infoEl = document.getElementById('spellCapacityInfo');
+  if(infoEl && typeof CLASS_PROGRESSION !== 'undefined'){
+    var className = textFields['class'] || '';
+    var level = parseInt(textFields['level']) || 1;
+    var cls = CLASS_PROGRESSION.find(function(c){return c.name===className;});
+    if(cls && cls.spellcaster){
+      var parts = [];
+      if(cls.cantrips_by_level){
+        var ct = cls.cantrips_by_level[String(level)] || 0;
+        parts.push('Trucos: ' + ct);
+      }
+      // Spells known/preparable
+      if(cls.caster_type === 'full' && (className === 'Clérigo' || className === 'Druida')){
+        parts.push('Preparar: ' + Math.max(1, abilityMod + level) + '/día');
+      } else if(cls.caster_type === 'full' && className === 'Mago'){
+        parts.push('Preparar: ' + Math.max(1, abilityMod + level) + '/día');
+      }
+      infoEl.textContent = parts.join(' · ');
+      infoEl.style.display = parts.length ? 'block' : 'none';
+    } else {
+      infoEl.style.display = 'none';
+    }
+  }
 }
 function renderSpells(){
   const el=document.getElementById('spellLevels'); if(!el)return; el.innerHTML=''; renderSpellMeta();
@@ -1023,7 +1047,7 @@ function renderSpells(){
       // Dot de preparado (TODOS los niveles, incluido trucos)
       entry += '<div class="spell-dot '+(isPrepared?'prepared':'')+'" onclick="togglePrepared('+lvl+','+i+')" title="'+(isPrepared?'Preparado':'Sin preparar')+'"></div>';
       if(state.editMode){
-        entry += '<input value="'+(sp||'').replace(/"/g,'&quot;')+'" placeholder="Nombre del conjuro..." onchange="state.spells['+lvl+'].list['+i+']=this.value" style="'+inpStyle+'">';
+        entry += '<span class="spell-name" style="flex:1;">' + (sp || '<em style="color:var(--on-surface-muted);">Vacío</em>') + '</span>';
         entry += '<button class="del-btn" onclick="removeSpell('+lvl+','+i+')" style="margin-left:4px;">✕</button>';
       } else {
         entry += '<span class="spell-name">'+sp+'</span>';
@@ -1203,10 +1227,131 @@ function delInvItem(i){ state.inventory.splice(i,1); renderInventory(); }
 function togglePrepared(lvl,idx){ if(!state.spells[lvl].prep) state.spells[lvl].prep=state.spells[lvl].list.map(()=>false); state.spells[lvl].prep[idx]=!state.spells[lvl].prep[idx]; renderSpells(); }
 function addSpell(lvl){
   if(!state.spells[lvl]) return;
-  state.spells[lvl].list.push('');
+  // Obtener hechizos disponibles para este nivel y clase
+  var className = textFields['class'] || '';
+  var available = getSpellsForClassLevel(className, lvl);
+  // Filtrar los que ya tiene el personaje
+  var current = state.spells[lvl].list.map(function(s){return s.toLowerCase().trim();});
+  available = available.filter(function(s){ return current.indexOf(s.name.toLowerCase().trim()) === -1; });
+
+  if(available.length === 0 && className){
+    showToast('No hay más ' + (lvl===0?'trucos':'conjuros de nivel '+lvl) + ' disponibles para ' + className, true);
+    return;
+  }
+  if(!className){
+    // Sin clase, agregar input libre
+    state.spells[lvl].list.push('');
+    state.spells[lvl].prep.push(false);
+    renderSpells();
+    return;
+  }
+  // Mostrar modal de selección
+  showSpellPicker(lvl, available);
+}
+
+function getSpellsForClassLevel(className, lvl){
+  if(typeof SPELLS_DATA === 'undefined' || !className) return [];
+  var raceName = textFields['race'] || '';
+  var subraceName = textFields['subrace'] || '';
+  var spells = SPELLS_DATA.filter(function(s){
+    return s.level === lvl && s.classes.indexOf(className) !== -1;
+  });
+  // Add racial spells
+  if(typeof RACIAL_SPELLS !== 'undefined'){
+    var rKey = subraceName || raceName;
+    var rd = RACIAL_SPELLS[rKey];
+    if(!rd && subraceName) rd = RACIAL_SPELLS[raceName];
+    if(rd){
+      var charLevel = parseInt(textFields['level']) || 1;
+      Object.keys(rd).forEach(function(reqLvl){
+        if(charLevel >= parseInt(reqLvl)){
+          rd[reqLvl].forEach(function(sn){
+            if(sn.startsWith('_')) return;
+            var found = SPELLS_DATA.find(function(s){ return s.name === sn && s.level === lvl; });
+            if(found && !spells.find(function(x){return x.name===found.name;})){
+              spells.push(Object.assign({}, found, {racial:true}));
+            }
+          });
+        }
+      });
+    }
+  }
+  spells.sort(function(a,b){return a.name.localeCompare(b.name);});
+  return spells;
+}
+
+function showSpellPicker(lvl, spells){
+  var overlay = document.getElementById('modalOverlay');
+  var titleEl = document.getElementById('modalTitle');
+  var bodyEl = document.getElementById('modalBody');
+  var inputWrap = document.getElementById('modalInputWrap');
+  var actionsEl = document.getElementById('modalActions');
+  if(!overlay) return;
+
+  titleEl.textContent = lvl === 0 ? 'Elegir Truco' : 'Elegir Conjuro de Nivel ' + lvl;
+
+  // Search + list
+  var html = '<input type="text" id="spellPickerSearch" placeholder="Buscar..." oninput="filterSpellPicker()" style="width:100%;padding:8px;margin-bottom:8px;background:var(--surface-container-low);border:none;border-bottom:1px solid var(--outline-variant);color:var(--on-surface);font-family:Crimson Text,serif;font-size:14px;outline:none;">';
+  html += '<div id="spellPickerList" style="max-height:300px;overflow-y:auto;">';
+  html += buildSpellPickerItems(spells);
+  html += '</div>';
+  html += '<input type="hidden" id="spellPickerSelected" value="">';
+  // Store data for filtering
+  html += '<script type="text/json" id="spellPickerData">' + JSON.stringify(spells.map(function(s){return{name:s.name,school:s.school,ritual:s.ritual,racial:s.racial||false};})) + '</script>';
+
+  bodyEl.innerHTML = html;
+  inputWrap.style.display = 'none';
+
+  actionsEl.innerHTML = '<button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancelar</button>' +
+    '<button class="modal-btn modal-btn-confirm" onclick="confirmSpellPick(' + lvl + ')">Agregar</button>';
+
+  // Store lvl for the picker
+  window._spellPickerLvl = lvl;
+  window._spellPickerSpells = spells;
+
+  overlay.style.display = 'flex';
+  setTimeout(function(){ var s = document.getElementById('spellPickerSearch'); if(s) s.focus(); }, 100);
+}
+
+function buildSpellPickerItems(spells){
+  return spells.map(function(s){
+    var tags = s.school;
+    if(s.ritual) tags += ' · Ritual';
+    if(s.racial) tags += ' · Racial';
+    return '<div class="modal-char-option" onclick="selectSpellPickerItem(this,\'' + s.name.replace(/'/g,"\\'") + '\')" data-name="' + s.name.replace(/"/g,'&quot;') + '">' +
+      '<span style="font-family:Cinzel,serif;font-size:13px;color:var(--on-surface);font-weight:600;">' + s.name + '</span>' +
+      '<span style="font-family:Manrope,sans-serif;font-size:9px;color:var(--on-surface-muted);">' + tags + '</span>' +
+    '</div>';
+  }).join('');
+}
+
+function selectSpellPickerItem(el, name){
+  document.querySelectorAll('#spellPickerList .modal-char-option').forEach(function(e){e.classList.remove('selected');});
+  el.classList.add('selected');
+  document.getElementById('spellPickerSelected').value = name;
+}
+
+function filterSpellPicker(){
+  var search = (document.getElementById('spellPickerSearch')||{}).value||'';
+  search = search.toLowerCase().trim();
+  var items = document.querySelectorAll('#spellPickerList .modal-char-option');
+  items.forEach(function(el){
+    var name = (el.getAttribute('data-name')||'').toLowerCase();
+    el.style.display = (!search || name.indexOf(search) !== -1) ? 'flex' : 'none';
+  });
+}
+
+function confirmSpellPick(lvl){
+  var name = (document.getElementById('spellPickerSelected')||{}).value || '';
+  if(!name){ showToast('Seleccioná un conjuro', true); return; }
+  closeModal();
+  if(!state.spells[lvl]) state.spells[lvl] = {slots:0, used:0, list:[], prep:[]};
+  state.spells[lvl].list.push(name);
   state.spells[lvl].prep.push(false);
   renderSpells();
+  showToast((lvl===0?'Truco':'Conjuro') + ' agregado: ' + name);
 }
+
 function removeSpell(lvl,idx){
   if(!state.spells[lvl]) return;
   state.spells[lvl].list.splice(idx,1);
@@ -1971,22 +2116,22 @@ function onClassChanged(className) {
   var cls = CLASS_PROGRESSION.find(function(c) { return c.name === className; });
   if (!cls) return;
 
-  // Auto-set proficiency bonus based on level
   var level = parseInt(textFields['level']) || 1;
   var profByLevel = {1:2,2:2,3:2,4:2,5:3,6:3,7:3,8:3,9:4,10:4,11:4,12:4,13:5,14:5,15:5,16:5,17:6,18:6,19:6,20:6};
   state.profBonus = profByLevel[level] || 2;
 
-  // Auto-set saving throw proficiencies
   if (cls.saves) {
     state.savingThrowProf = cls.saves.slice();
   }
 
-  // Set spell ability key
   var spellKeyMap = {'Bardo':'cha','Brujo':'cha','Clérigo':'wis','Druida':'wis','Explorador':'wis','Hechicero':'cha','Mago':'int','Paladín':'cha'};
   if (spellKeyMap[className]) {
     state.spellAbilityKey = spellKeyMap[className];
     textFields['spellAbility'] = spellKeyMap[className].toUpperCase();
   }
+
+  // Auto-configure spell slots from class data
+  autoConfigureSpellSlots(className, level);
 
   renderAll();
   showToast('Clase: ' + className + ' · Salvaciones y competencia actualizados');
@@ -1995,7 +2140,37 @@ function onClassChanged(className) {
 function onLevelChanged(level) {
   var profByLevel = {1:2,2:2,3:2,4:2,5:3,6:3,7:3,8:3,9:4,10:4,11:4,12:4,13:5,14:5,15:5,16:5,17:6,18:6,19:6,20:6};
   state.profBonus = profByLevel[level] || 2;
+  var className = textFields['class'] || '';
+  if (className) autoConfigureSpellSlots(className, level);
   renderAll();
+}
+
+function autoConfigureSpellSlots(className, level) {
+  if (typeof CLASS_PROGRESSION === 'undefined') return;
+  var cls = CLASS_PROGRESSION.find(function(c) { return c.name === className; });
+  if (!cls || !cls.spell_slots) return;
+
+  var slotsData = cls.spell_slots[level];
+  if (!slotsData) return;
+
+  if (Array.isArray(slotsData)) {
+    // Full/half caster
+    for (var i = 0; i < slotsData.length; i++) {
+      var spellLvl = i + 1;
+      if (!state.spells[spellLvl]) {
+        state.spells[spellLvl] = {slots: 0, used: 0, list: [], prep: []};
+      }
+      state.spells[spellLvl].slots = slotsData[i];
+    }
+  } else if (slotsData.slots !== undefined) {
+    // Warlock
+    for (var wl = 1; wl <= slotsData.level; wl++) {
+      if (!state.spells[wl]) {
+        state.spells[wl] = {slots: 0, used: 0, list: [], prep: []};
+      }
+      state.spells[wl].slots = (wl === slotsData.level) ? slotsData.slots : 0;
+    }
+  }
 }
 
 function onRaceChanged(raceName) {
